@@ -27,7 +27,7 @@ from scheduler import setup_scheduler
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 PORT = int(os.getenv("PORT", 8080))
-RENDER_URL = "https://astrobot-2-0.onrender.com"  # Ваш URL на Render
+RENDER_URL = "https://astrobot-2-0.onrender.com"
 
 if not BOT_TOKEN:
     logging.critical("❌ BOT_TOKEN не найден в .env")
@@ -49,11 +49,14 @@ async def error_handler(update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         logger.exception("Не удалось отправить сообщение об ошибке.")
 
+# Создаем глобальную переменную для приложения
+application = None
+
 # === Обработчик webhook ===
 async def webhook_handler(request):
     try:
         update = await request.json()
-        await app.process_update(update)
+        await application.process_update(update)
         return web.Response()
     except Exception as e:
         logger.error(f"Ошибка обработки webhook: {e}")
@@ -61,7 +64,7 @@ async def webhook_handler(request):
 
 # === main ===
 async def main():
-    global app
+    global application
     
     # 📂 Подготовка
     init_db()
@@ -70,50 +73,52 @@ async def main():
     defaults = Defaults(parse_mode=ParseMode.HTML)
 
     # 🤖 Приложение
-    app = Application.builder().token(BOT_TOKEN).defaults(defaults).build()
+    application = Application.builder().token(BOT_TOKEN).defaults(defaults).build()
+    await application.initialize()  # Инициализируем приложение
+    await application.start()  # Запускаем приложение
 
     # === 📌 Команды ===
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("menu", start))
-    app.add_handler(CommandHandler("help", start))
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("menu", start))
+    application.add_handler(CommandHandler("help", start))
 
-    app.add_handler(CommandHandler("subscribe", subscribe))
-    app.add_handler(CommandHandler("unsubscribe", unsubscribe))
-    app.add_handler(CommandHandler("status", subscription_status))
+    application.add_handler(CommandHandler("subscribe", subscribe))
+    application.add_handler(CommandHandler("unsubscribe", unsubscribe))
+    application.add_handler(CommandHandler("status", subscription_status))
 
-    app.add_handler(CommandHandler("horoscope", horoscope_today))
-    app.add_handler(CommandHandler("tomorrow", horoscope_tomorrow))
-    app.add_handler(CommandHandler("moon", moon))
+    application.add_handler(CommandHandler("horoscope", horoscope_today))
+    application.add_handler(CommandHandler("tomorrow", horoscope_tomorrow))
+    application.add_handler(CommandHandler("moon", moon))
 
-    app.add_handler(CommandHandler("tarot", tarot))
-    app.add_handler(CommandHandler("tarot3", tarot3))
-    app.add_handler(CommandHandler("tarot5", tarot5))
-    app.add_handler(CommandHandler("compatibility", compatibility))
+    application.add_handler(CommandHandler("tarot", tarot))
+    application.add_handler(CommandHandler("tarot3", tarot3))
+    application.add_handler(CommandHandler("tarot5", tarot5))
+    application.add_handler(CommandHandler("compatibility", compatibility))
 
     # ✅ Callback кнопки
-    app.add_handler(CallbackQueryHandler(button_handler))
+    application.add_handler(CallbackQueryHandler(button_handler))
 
     # ✅ Текст клавиатуры (Reply-кнопки)
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, reply_command_handler))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, reply_command_handler))
 
     # 🛑 Глобальный обработчик ошибок
-    app.add_error_handler(error_handler)
+    application.add_error_handler(error_handler)
 
     # ⏰ Планировщик
-    setup_scheduler(app)
+    setup_scheduler(application)
 
     # ▶️ Настройка webhook
     webhook_path = f"/webhook/{BOT_TOKEN}"
     webhook_url = f"{RENDER_URL}{webhook_path}"
     
-    await app.bot.set_webhook(webhook_url)
+    await application.bot.set_webhook(webhook_url)
     logger.info(f"🚀 Webhook установлен на {webhook_url}")
 
     # Настройка веб-приложения
-    app_web = web.Application()
-    app_web.router.add_post(webhook_path, webhook_handler)
+    app = web.Application()
+    app.router.add_post(webhook_path, webhook_handler)
     
-    return app_web
+    return app
 
 # === Точка входа ===
 if __name__ == "__main__":
