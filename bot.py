@@ -160,7 +160,6 @@ async def setup_bot():
         === Информация о webhook ===
         URL: {webhook_info.url}
         Pending updates: {webhook_info.pending_update_count}
-        Last error: {webhook_info.last_error or 'Нет ошибок'}
         """)
 
         logger.info("✅ Бот успешно настроен")
