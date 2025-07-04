@@ -3,6 +3,7 @@ AstroBot — Telegram ассистент по гороскопам, Таро и 
 """
 
 import os
+import time
 import logging
 from dotenv import load_dotenv
 from telegram.ext import (
@@ -40,6 +41,30 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Создаем глобальную переменную для приложения
+application = None
+
+# === Обработчики путей ===
+async def health_check(request):
+    """Расширенный обработчик для проверки работоспособности"""
+    return web.json_response({
+        "status": "running",
+        "timestamp": time.time(),
+        "webhook_path": f"/webhook/{BOT_TOKEN}",
+        "service": "AstroBot",
+        "version": "2.0"
+    })
+
+async def webhook_handler(request):
+    """Обработчик webhook запросов от Telegram"""
+    try:
+        update = await request.json()
+        await application.process_update(update)
+        return web.Response()
+    except Exception as e:
+        logger.error(f"Ошибка обработки webhook: {e}")
+        return web.Response(status=500)
+
 # === ⛑ Глобальный обработчик ошибок ===
 async def error_handler(update, context: ContextTypes.DEFAULT_TYPE):
     logger.error("❌ Ошибка: %s", context.error, exc_info=True)
@@ -48,19 +73,6 @@ async def error_handler(update, context: ContextTypes.DEFAULT_TYPE):
             await update.effective_message.reply_text("⚠️ Произошла ошибка. Попробуйте позже.")
     except Exception:
         logger.exception("Не удалось отправить сообщение об ошибке.")
-
-# Создаем глобальную переменную для приложения
-application = None
-
-# === Обработчик webhook ===
-async def webhook_handler(request):
-    try:
-        update = await request.json()
-        await application.process_update(update)
-        return web.Response()
-    except Exception as e:
-        logger.error(f"Ошибка обработки webhook: {e}")
-        return web.Response(status=500)
 
 # === main ===
 async def main():
@@ -74,8 +86,10 @@ async def main():
 
     # 🤖 Приложение
     application = Application.builder().token(BOT_TOKEN).defaults(defaults).build()
-    await application.initialize()  # Инициализируем приложение
-    await application.start()  # Запускаем приложение
+    
+    # Инициализация и запуск
+    await application.initialize()
+    await application.start()
 
     # === 📌 Команды ===
     application.add_handler(CommandHandler("start", start))
@@ -116,7 +130,14 @@ async def main():
 
     # Настройка веб-приложения
     app = web.Application()
+    
+    # Добавляем обработчики путей
+    app.router.add_get("/", health_check)
     app.router.add_post(webhook_path, webhook_handler)
+    
+    # Логируем запуск
+    logger.info("🌐 Веб-сервер настроен и готов к запуску")
+    logger.info(f"📡 Сервер будет слушать порт {PORT}")
     
     return app
 
