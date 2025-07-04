@@ -6,11 +6,12 @@ import os
 import logging
 from dotenv import load_dotenv
 from telegram.ext import (
-    ApplicationBuilder, CommandHandler, CallbackQueryHandler,
+    Application, CommandHandler, CallbackQueryHandler,
     MessageHandler, ContextTypes, Defaults, filters
 )
 from telegram.constants import ParseMode
 from telegram.error import TelegramError
+from aiohttp import web
 
 from handlers.menu import start, button_handler, reply_command_handler
 from handlers.horoscope import horoscope_today, horoscope_tomorrow
@@ -22,15 +23,15 @@ from handlers.compatibility import compatibility
 from services.database import init_db
 from scheduler import setup_scheduler
 
-
-# === 🔐 Загрузка токена ===
+# === 🔐 Загрузка токена и настроек ===
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+PORT = int(os.getenv("PORT", 8080))
+RENDER_URL = "https://astrobot-2-0.onrender.com"  # Ваш URL на Render
 
 if not BOT_TOKEN:
     logging.critical("❌ BOT_TOKEN не найден в .env")
     raise SystemExit("BOT_TOKEN отсутствует. Выход.")
-
 
 # === 📝 Логгирование ===
 logging.basicConfig(
@@ -38,7 +39,6 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
-
 
 # === ⛑ Глобальный обработчик ошибок ===
 async def error_handler(update, context: ContextTypes.DEFAULT_TYPE):
@@ -49,9 +49,20 @@ async def error_handler(update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         logger.exception("Не удалось отправить сообщение об ошибке.")
 
+# === Обработчик webhook ===
+async def webhook_handler(request):
+    try:
+        update = await request.json()
+        await app.process_update(update)
+        return web.Response()
+    except Exception as e:
+        logger.error(f"Ошибка обработки webhook: {e}")
+        return web.Response(status=500)
 
 # === main ===
-def main():
+async def main():
+    global app
+    
     # 📂 Подготовка
     init_db()
 
@@ -59,7 +70,7 @@ def main():
     defaults = Defaults(parse_mode=ParseMode.HTML)
 
     # 🤖 Приложение
-    app = ApplicationBuilder().token(BOT_TOKEN).defaults(defaults).build()
+    app = Application.builder().token(BOT_TOKEN).defaults(defaults).build()
 
     # === 📌 Команды ===
     app.add_handler(CommandHandler("start", start))
@@ -91,12 +102,19 @@ def main():
     # ⏰ Планировщик
     setup_scheduler(app)
 
-    # ▶️ Запуск
-    logger.info("🚀 AstroBot стартует...")
-    print("🤖 AstroBot запущен. Polling начат.")
-    app.run_polling()
+    # ▶️ Настройка webhook
+    webhook_path = f"/webhook/{BOT_TOKEN}"
+    webhook_url = f"{RENDER_URL}{webhook_path}"
+    
+    await app.bot.set_webhook(webhook_url)
+    logger.info(f"🚀 Webhook установлен на {webhook_url}")
 
+    # Настройка веб-приложения
+    app_web = web.Application()
+    app_web.router.add_post(webhook_path, webhook_handler)
+    
+    return app_web
 
 # === Точка входа ===
 if __name__ == "__main__":
-    main()
+    web.run_app(main(), port=PORT)
