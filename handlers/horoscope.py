@@ -1,4 +1,4 @@
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from services.gpt_horoscope import generate_horoscope
 from keyboards import get_zodiac_inline_keyboard, get_back_to_menu_inline
@@ -11,7 +11,7 @@ SIGNS = {
     "козерог": "capricorn", "водолей": "aquarius", "рыбы": "pisces"
 }
 
-async def send_horoscope(update_or_query, sign: str, day: str):
+async def send_horoscope(update_or_query, sign: str, day: str, detailed: bool = False):
     """Отправляет гороскоп пользователю"""
     try:
         # Проверка знака
@@ -26,23 +26,36 @@ async def send_horoscope(update_or_query, sign: str, day: str):
         sign_eng = SIGNS[sign.lower()]
         
         # Сообщение о генерации
-        loading_text = "🔮 Генерируется гороскоп..." if day == "today" else "🌙 Генерируется гороскоп на завтра..."
+        loading_text = "🔮 Генерируется гороскоп..."
         if hasattr(update_or_query, 'message'):
             message = await update_or_query.message.reply_text(loading_text)
         else:
             message = await update_or_query.edit_message_text(loading_text)
 
         # Получаем гороскоп
-        horoscope_text = generate_horoscope(sign_eng, day=day)
+        horoscope_text = generate_horoscope(sign_eng, day=day, detailed=detailed)
 
         # Формируем ответ
         day_text = "сегодня" if day == "today" else "завтра"
-        response = f"♈ Гороскоп для {sign.title()} на {day_text}:\n\n{horoscope_text}"
+        
+        if detailed:
+            response = f"♈ Подробный гороскоп для {sign.title()} на {day_text}:\n\n{horoscope_text}"
+            # Для подробного гороскопа показываем только кнопку возврата в меню
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("« Назад в меню", callback_data="menu")]
+            ])
+        else:
+            response = f"♈ Гороскоп для {sign.title()} на {day_text}:\n\n{horoscope_text}"
+            # Для краткого гороскопа показываем кнопку "Подробнее" и возврат в меню
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("📝 Подробнее", callback_data=f"horoscope:{sign}:{day}:true")],
+                [InlineKeyboardButton("« Назад в меню", callback_data="menu")]
+            ])
 
         # Отправляем ответ
         await message.edit_text(
             text=response,
-            reply_markup=get_back_to_menu_inline()
+            reply_markup=keyboard
         )
 
     except Exception as e:
@@ -111,12 +124,19 @@ async def handle_zodiac_callback(update: Update, context: ContextTypes.DEFAULT_T
             )
             return
 
-        prefix, sign = data.split(":", 1)
+        parts = data.split(":")
+        if len(parts) == 4:  # horoscope:sign:day:detailed
+            prefix, sign, day, detailed = parts
+            detailed = detailed.lower() == "true"
+        else:
+            prefix, sign = parts
+            day = "today"
+            detailed = False  # По умолчанию показываем краткий гороскоп
         
         if prefix == "horoscope":
-            await send_horoscope(query, sign, day="today")
+            await send_horoscope(query, sign, day, detailed)
         elif prefix == "horoscope_tomorrow":
-            await send_horoscope(query, sign, day="tomorrow")
+            await send_horoscope(query, sign, "tomorrow", detailed)
         else:
             await query.message.edit_text(
                 "⚠️ Неизвестный тип гороскопа. Вернитесь в главное меню:",
