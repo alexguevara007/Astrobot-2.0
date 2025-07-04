@@ -13,6 +13,17 @@ from telegram.ext import (
     MessageHandler, ContextTypes, Defaults, filters
 )
 from telegram.constants import ParseMode
+from telegram.error import TelegramError
+
+from handlers.menu import start, button_handler, reply_command_handler
+from handlers.horoscope import horoscope_today, horoscope_tomorrow
+from handlers.subscribe import subscribe, unsubscribe, subscription_status
+from handlers.moon import moon
+from handlers.tarot import tarot, tarot3
+from handlers.tarot5 import tarot5
+from handlers.compatibility import compatibility
+from services.database import init_db
+from scheduler import setup_scheduler
 
 # === 📝 Логгирование ===
 logging.basicConfig(
@@ -34,43 +45,14 @@ if not BOT_TOKEN:
 # Создаем глобальную переменную для приложения
 application = None
 
-# === Тестовые обработчики команд ===
-async def test_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Тестовый обработчик команды /start"""
+# === ⛑ Глобальный обработчик ошибок ===
+async def error_handler(update, context: ContextTypes.DEFAULT_TYPE):
+    logger.error("❌ Ошибка: %s", context.error, exc_info=True)
     try:
-        user_id = update.effective_user.id if update.effective_user else "Неизвестно"
-        logger.info(f"Вызвана команда /start пользователем {user_id}")
-        
-        await update.message.reply_text(
-            "🌟 Добро пожаловать в AstroBot!\n\n"
-            "Доступные команды:\n"
-            "/start - Показать это сообщение\n"
-            "/tarot - Расклад Таро"
-        )
-        logger.info("Ответ на /start отправлен успешно")
-    except Exception as e:
-        logger.error(f"Ошибка в обработчике test_start: {e}")
-        logger.exception("Стек ошибки:")
-        if update and update.message:
-            await update.message.reply_text("Произошла ошибка")
-
-async def test_tarot(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Тестовый обработчик команды /tarot"""
-    try:
-        user_id = update.effective_user.id if update.effective_user else "Неизвестно"
-        logger.info(f"Вызвана команда /tarot пользователем {user_id}")
-        
-        await update.message.reply_text(
-            "🎴 Расклад Таро\n\n"
-            "Идет подготовка расклада...\n"
-            "Пожалуйста, подождите."
-        )
-        logger.info("Ответ на /tarot отправлен успешно")
-    except Exception as e:
-        logger.error(f"Ошибка в обработчике test_tarot: {e}")
-        logger.exception("Стек ошибки:")
-        if update and update.message:
-            await update.message.reply_text("Произошла ошибка")
+        if update and update.effective_message:
+            await update.effective_message.reply_text("⚠️ Произошла ошибка. Попробуйте позже.")
+    except Exception:
+        logger.exception("Не удалось отправить сообщение об ошибке.")
 
 # === Обработчик webhook ===
 async def webhook_handler(request):
@@ -80,37 +62,10 @@ async def webhook_handler(request):
         logger.info("\n=================НОВОЕ ОБНОВЛЕНИЕ=================")
         logger.info(f"RAW UPDATE: {update_data}")
 
-        if 'message' in update_data:
-            message = update_data['message']
-            chat_id = message.get('chat', {}).get('id')
-            text = message.get('text', '')
-            
-            logger.info(f"""
-            Детали сообщения:
-            Chat ID: {chat_id}
-            Текст: {text}
-            Это команда: {text.startswith('/')}
-            """)
-            
-            # Создаем объект Update
-            update = Update.de_json(update_data, application.bot)
-            
-            # Обрабатываем команды
-            try:
-                if text == '/start':
-                    await test_start(update, None)
-                elif text == '/tarot':
-                    await test_tarot(update, None)
-                else:
-                    await application.bot.send_message(
-                        chat_id=chat_id,
-                        text=f"Получена команда: {text}"
-                    )
-                logger.info(f"Сообщение обработано для команды {text}")
-            except Exception as e:
-                logger.error(f"Ошибка обработки команды {text}: {e}")
-                logger.exception("Стек ошибки:")
-
+        update = Update.de_json(update_data, application.bot)
+        await application.process_update(update)
+        logger.info("✅ Обновление обработано")
+        
         return web.Response()
     except Exception as e:
         logger.error(f"❌ Ошибка обработки webhook: {e}")
@@ -142,21 +97,47 @@ async def setup_bot():
     global application
     
     try:
+        # 📂 Подготовка
+        init_db()
+
+        # ✅ Настройки по умолчанию (HTML)
         defaults = Defaults(parse_mode=ParseMode.HTML)
+
+        # 🤖 Приложение
         application = Application.builder().token(BOT_TOKEN).defaults(defaults).build()
         
         await application.initialize()
         await application.start()
 
-        # Тестовые обработчики
-        application.add_handler(CommandHandler("start", test_start))
-        application.add_handler(CommandHandler("tarot", test_tarot))
-        
-        # Базовый обработчик текста
-        application.add_handler(MessageHandler(
-            filters.TEXT & ~filters.COMMAND, 
-            lambda update, context: update.message.reply_text("Получено текстовое сообщение")
-        ))
+        # === 📌 Команды ===
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(CommandHandler("menu", start))
+        application.add_handler(CommandHandler("help", start))
+
+        application.add_handler(CommandHandler("subscribe", subscribe))
+        application.add_handler(CommandHandler("unsubscribe", unsubscribe))
+        application.add_handler(CommandHandler("status", subscription_status))
+
+        application.add_handler(CommandHandler("horoscope", horoscope_today))
+        application.add_handler(CommandHandler("tomorrow", horoscope_tomorrow))
+        application.add_handler(CommandHandler("moon", moon))
+
+        application.add_handler(CommandHandler("tarot", tarot))
+        application.add_handler(CommandHandler("tarot3", tarot3))
+        application.add_handler(CommandHandler("tarot5", tarot5))
+        application.add_handler(CommandHandler("compatibility", compatibility))
+
+        # ✅ Callback кнопки
+        application.add_handler(CallbackQueryHandler(button_handler))
+
+        # ✅ Текст клавиатуры (Reply-кнопки)
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, reply_command_handler))
+
+        # 🛑 Глобальный обработчик ошибок
+        application.add_error_handler(error_handler)
+
+        # ⏰ Планировщик
+        setup_scheduler(application)
 
         # Проверка подключения
         bot_info = await application.bot.get_me()
