@@ -2,38 +2,105 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from telegram.error import BadRequest
 import logging
+import time
+from datetime import datetime
 from services.gpt_horoscope import generate_horoscope
 from keyboards import get_zodiac_inline_keyboard, get_back_to_menu_inline
 
 logger = logging.getLogger(__name__)
 
-# Карта знаков зодиака с эмодзи
+# Карта знаков зодиака с эмодзи и описанием стихий
 ZODIAC_SIGNS = {
-    "овен": ("aries", "♈️"),
-    "телец": ("taurus", "♉️"),
-    "близнецы": ("gemini", "♊️"),
-    "рак": ("cancer", "♋️"),
-    "лев": ("leo", "♌️"),
-    "дева": ("virgo", "♍️"),
-    "весы": ("libra", "♎️"),
-    "скорпион": ("scorpio", "♏️"),
-    "стрелец": ("sagittarius", "♐️"),
-    "козерог": ("capricorn", "♑️"),
-    "водолей": ("aquarius", "♒️"),
-    "рыбы": ("pisces", "♓️")
+    "овен": {
+        "eng": "aries",
+        "emoji": "♈️",
+        "element": "🔥 Огонь",
+        "planet": "♂️ Марс"
+    },
+    "телец": {
+        "eng": "taurus",
+        "emoji": "♉️",
+        "element": "🌍 Земля",
+        "planet": "♀️ Венера"
+    },
+    "близнецы": {
+        "eng": "gemini",
+        "emoji": "♊️",
+        "element": "💨 Воздух",
+        "planet": "☿ Меркурий"
+    },
+    "рак": {
+        "eng": "cancer",
+        "emoji": "♋️",
+        "element": "💧 Вода",
+        "planet": "🌙 Луна"
+    },
+    "лев": {
+        "eng": "leo",
+        "emoji": "♌️",
+        "element": "🔥 Огонь",
+        "planet": "☀️ Солнце"
+    },
+    "дева": {
+        "eng": "virgo",
+        "emoji": "♍️",
+        "element": "🌍 Земля",
+        "planet": "☿ Меркурий"
+    },
+    "весы": {
+        "eng": "libra",
+        "emoji": "♎️",
+        "element": "💨 Воздух",
+        "planet": "♀️ Венера"
+    },
+    "скорпион": {
+        "eng": "scorpio",
+        "emoji": "♏️",
+        "element": "💧 Вода",
+        "planet": "♇ Плутон"
+    },
+    "стрелец": {
+        "eng": "sagittarius",
+        "emoji": "♐️",
+        "element": "🔥 Огонь",
+        "planet": "♃ Юпитер"
+    },
+    "козерог": {
+        "eng": "capricorn",
+        "emoji": "♑️",
+        "element": "🌍 Земля",
+        "planet": "♄ Сатурн"
+    },
+    "водолей": {
+        "eng": "aquarius",
+        "emoji": "♒️",
+        "element": "💨 Воздух",
+        "planet": "⛢ Уран"
+    },
+    "рыбы": {
+        "eng": "pisces",
+        "emoji": "♓️",
+        "element": "💧 Вода",
+        "planet": "♆ Нептун"
+    }
 }
 
-# Кнопки действий для гороскопа
-def get_horoscope_actions_keyboard(sign: str, day: str):
+def get_horoscope_actions_keyboard(sign: str, day: str, detailed: bool = False):
     """Создает клавиатуру с действиями для гороскопа"""
-    return InlineKeyboardMarkup([
-        [
+    buttons = []
+    
+    if not detailed:
+        buttons.append([
             InlineKeyboardButton("📝 Подробнее", callback_data=f"horoscope:{sign}:{day}:true"),
             InlineKeyboardButton("🔄 Обновить", callback_data=f"horoscope:{sign}:{day}:false")
-        ],
+        ])
+    
+    buttons.extend([
         [InlineKeyboardButton("🔮 Другой знак", callback_data=f"horoscope_menu:{day}")],
         [InlineKeyboardButton("« Назад в меню", callback_data="main_menu")]
     ])
+    
+    return InlineKeyboardMarkup(buttons)
 
 async def send_horoscope(update_or_query, sign: str, day: str, detailed: bool = False):
     """Отправляет гороскоп пользователю"""
@@ -54,10 +121,17 @@ async def send_horoscope(update_or_query, sign: str, day: str, detailed: bool = 
                 )
             return
 
-        sign_eng, sign_emoji = ZODIAC_SIGNS[sign_lower]
+        sign_info = ZODIAC_SIGNS[sign_lower]
         
-        # Сообщение о генерации
-        loading_text = f"🔮 Генерируется гороскоп для {sign_emoji} {sign.title()}..."
+        # Сообщение о генерации с предупреждением и информацией о знаке
+        loading_text = (
+            f"{sign_info['emoji']} Генерируется гороскоп для {sign.title()}\n"
+            f"Стихия: {sign_info['element']}\n"
+            f"Управитель: {sign_info['planet']}\n\n"
+            "⚠️ Первый запрос может занять до минуты из-за особенностей хостинга.\n"
+            "Пожалуйста, подождите..."
+        )
+        
         if hasattr(update_or_query, 'message'):
             message = await update_or_query.message.reply_text(loading_text)
         else:
@@ -65,30 +139,42 @@ async def send_horoscope(update_or_query, sign: str, day: str, detailed: bool = 
 
         # Получаем гороскоп
         try:
-            horoscope_text = generate_horoscope(sign_eng, day=day, detailed=detailed)
+            start_time = time.time()
+            horoscope_text = generate_horoscope(sign_info['eng'], day=day, detailed=detailed)
+            generation_time = time.time() - start_time
+            logger.info(f"Время генерации гороскопа для {sign}: {generation_time:.2f} секунд")
         except Exception as e:
             logger.error(f"Ошибка генерации гороскопа: {e}")
+            error_text = (
+                f"{sign_info['emoji']} Ошибка при генерации гороскопа\n\n"
+                "Это может быть связано с перезапуском сервера.\n"
+                "Пожалуйста, попробуйте через минуту."
+            )
             await message.edit_text(
-                "⚠️ Произошла ошибка при генерации гороскопа. Попробуйте позже.",
+                error_text,
                 reply_markup=get_back_to_menu_inline()
             )
             return
 
         # Формируем ответ
         day_text = "сегодня" if day == "today" else "завтра"
-        response = f"{sign_emoji} {'Подробный' if detailed else 'Краткий'} гороскоп для {sign.title()} на {day_text}:\n\n{horoscope_text}"
-
-        # Добавляем клавиатуру с действиями
-        keyboard = get_horoscope_actions_keyboard(sign, day) if not detailed else InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔮 Другой знак", callback_data=f"horoscope_menu:{day}")],
-            [InlineKeyboardButton("« Назад в меню", callback_data="main_menu")]
-        ])
+        current_date = datetime.now().strftime("%d.%m.%Y")
+        
+        header = (
+            f"{sign_info['emoji']} {sign.title()}\n"
+            f"Стихия: {sign_info['element']}\n"
+            f"Управитель: {sign_info['planet']}\n"
+            f"{'Подробный' if detailed else 'Краткий'} гороскоп на {day_text} ({current_date})\n"
+            f"{'_' * 30}\n\n"
+        )
+        
+        response = header + horoscope_text
 
         # Отправляем ответ
         try:
             await message.edit_text(
                 text=response,
-                reply_markup=keyboard
+                reply_markup=get_horoscope_actions_keyboard(sign, day, detailed)
             )
         except BadRequest as e:
             if "Message is too long" in str(e):
@@ -102,24 +188,32 @@ async def send_horoscope(update_or_query, sign: str, day: str, detailed: bool = 
                 # Добавляем клавиатуру к последнему сообщению
                 await message.reply_text(
                     "Выберите действие:",
-                    reply_markup=keyboard
+                    reply_markup=get_horoscope_actions_keyboard(sign, day, detailed)
                 )
             else:
+                logger.error(f"Ошибка отправки сообщения: {e}")
                 raise
 
     except Exception as e:
         logger.error(f"Ошибка отправки гороскопа: {e}")
-        error_message = "⚠️ Произошла ошибка. Попробуйте позже."
-        if hasattr(update_or_query, 'message'):
-            await update_or_query.message.reply_text(
-                error_message,
-                reply_markup=get_back_to_menu_inline()
-            )
-        else:
-            await update_or_query.edit_message_text(
-                error_message,
-                reply_markup=get_back_to_menu_inline()
-            )
+        error_text = (
+            "⚠️ Произошла ошибка\n\n"
+            "Возможно, сервер перезапускается.\n"
+            "Пожалуйста, попробуйте через минуту."
+        )
+        try:
+            if hasattr(update_or_query, 'message'):
+                await update_or_query.message.reply_text(
+                    error_text,
+                    reply_markup=get_back_to_menu_inline()
+                )
+            else:
+                await update_or_query.edit_message_text(
+                    error_text,
+                    reply_markup=get_back_to_menu_inline()
+                )
+        except Exception as e:
+            logger.error(f"Критическая ошибка при отправке сообщения об ошибке: {e}")
 
 async def horoscope_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды гороскопа на сегодня"""
@@ -137,15 +231,18 @@ async def horoscope_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
     except Exception as e:
         logger.error(f"Ошибка в horoscope_today: {e}")
-        error_message = "⚠️ Произошла ошибка. Попробуйте позже."
+        error_text = (
+            "⚠️ Произошла ошибка\n"
+            "Пожалуйста, попробуйте позже."
+        )
         if update.callback_query:
             await update.callback_query.message.reply_text(
-                error_message,
+                error_text,
                 reply_markup=get_back_to_menu_inline()
             )
         else:
             await update.message.reply_text(
-                error_message,
+                error_text,
                 reply_markup=get_back_to_menu_inline()
             )
 
@@ -165,15 +262,18 @@ async def horoscope_tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE)
             )
     except Exception as e:
         logger.error(f"Ошибка в horoscope_tomorrow: {e}")
-        error_message = "⚠️ Произошла ошибка. Попробуйте позже."
+        error_text = (
+            "⚠️ Произошла ошибка\n"
+            "Пожалуйста, попробуйте позже."
+        )
         if update.callback_query:
             await update.callback_query.message.reply_text(
-                error_message,
+                error_text,
                 reply_markup=get_back_to_menu_inline()
             )
         else:
             await update.message.reply_text(
-                error_message,
+                error_text,
                 reply_markup=get_back_to_menu_inline()
             )
 
@@ -223,13 +323,17 @@ async def handle_zodiac_callback(update: Update, context: ContextTypes.DEFAULT_T
 
     except Exception as e:
         logger.error(f"Ошибка в handle_zodiac_callback: {e}")
+        error_text = (
+            "⚠️ Произошла ошибка\n"
+            "Пожалуйста, попробуйте позже."
+        )
         try:
             await update.callback_query.message.edit_text(
-                "⚠️ Произошла ошибка. Попробуйте позже.",
+                error_text,
                 reply_markup=get_back_to_menu_inline()
             )
         except:
             await update.callback_query.message.reply_text(
-                "⚠️ Произошла ошибка. Попробуйте позже.",
+                error_text,
                 reply_markup=get_back_to_menu_inline()
             )
