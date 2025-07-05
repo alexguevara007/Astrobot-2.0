@@ -1,0 +1,89 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+.venv/
+ENV/
+env/
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+logs/
+log/
+
+# Cache
+cache/
+.cache/
+*.cache
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Bot specific
+horoscope_cache.json
+tarot_cache.json
+*.session
+*.session-journal
+
+# Temp files
+*.tmp
+*.temp
+*.bak
+*~
+
+# Local configuration
+config.local.py
+settings.local.py
+
+# Certificates and keys
+*.pem
+*.key
+*.crt
+
+# Media
+media/
+uploads/
+images/
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.mp4
+*.wav
+*.mp3
+
+# Other
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
