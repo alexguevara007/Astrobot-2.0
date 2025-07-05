@@ -1,129 +1,112 @@
+import logging
 from datetime import datetime
-import ephem
-from math import floor
 import pytz
+from skyfield.api import load, Topos
+from skyfield.almanac import moon_phase
+from typing import Dict, Any
 
-def get_moon_day() -> int:
-    """Получает текущий лунный день"""
-    # Используем московское время
-    tz = pytz.timezone('Europe/Moscow')
-    now = datetime.now(tz)
-    
-    # Создаем объект Observer для расчета с учетом локации (примерный центр России)
-    obs = ephem.Observer()
-    obs.lat = '55.7522'  # Широта Москвы
-    obs.long = '37.6156'  # Долгота Москвы
-    obs.date = now
-    
-    # Получаем время предыдущего новолуния
-    previous_new_moon = ephem.previous_new_moon(now.strftime('%Y/%m/%d'))
-    
-    # Вычисляем количество дней, прошедших с новолуния
-    moon_day = int(now.date().strftime('%d')) - int(previous_new_moon.datetime().strftime('%d'))
-    if moon_day <= 0:
-        moon_day += 30
-    
-    return moon_day
+logger = logging.getLogger(__name__)
 
-def get_moon_phase() -> float:
-    """Получает текущую фазу луны (0-1)"""
-    moon = ephem.Moon()
-    # Используем московское время
-    tz = pytz.timezone('Europe/Moscow')
-    now = datetime.now(tz)
-    moon.compute(now)
-    return moon.phase / 100.0
+class LunarCalendar:
+    def __init__(self):
+        self.ts = load.timescale()
+        self.eph = load('de421.bsp')
+        self.earth = self.eph['earth']
+        self.moon = self.eph['moon']
+        self.sun = self.eph['sun']
 
-def get_moon_phase_name(phase: float) -> str:
-    """Получает название фазы луны"""
-    if phase < 0.05:
-        return "🌑 Новолуние"
-    elif phase < 0.25:
-        return "🌒 Растущая луна"
-    elif phase < 0.45:
-        return "🌓 Первая четверть"
-    elif phase < 0.55:
-        return "🌕 Полнолуние"
-    elif phase < 0.75:
-        return "🌗 Последняя четверть"
-    elif phase < 0.95:
-        return "🌘 Убывающая луна"
-    else:
-        return "🌑 Новолуние"
+    def get_moon_info(self) -> Dict[str, Any]:
+        """Получение детальной информации о луне"""
+        try:
+            now = self.ts.now()
+            
+            # Фаза луны (0-1)
+            phase = moon_phase(self.eph, now)
+            
+            # Определение фазы
+            phase_info = self._get_phase_name(phase)
+            
+            # Расчет расстояния до луны
+            moon_distance = self._calculate_moon_distance(now)
+            
+            # Определение знака зодиака
+            zodiac_sign = self._get_moon_zodiac(now)
+            
+            return {
+                "phase": phase_info["name"],
+                "emoji": phase_info["emoji"],
+                "illumination": phase * 100,
+                "distance": moon_distance,
+                "zodiac": zodiac_sign,
+                "growing": phase < 0.5,
+                "timestamp": datetime.now(pytz.UTC)
+            }
+        except Exception as e:
+            logger.error(f"Ошибка при получении данных о луне: {e}")
+            raise
 
-def get_moon_sign() -> str:
-    """Получает знак зодиака, в котором находится луна"""
-    moon = ephem.Moon()
-    # Используем московское время
-    tz = pytz.timezone('Europe/Moscow')
-    now = datetime.now(tz)
-    moon.compute(now)
-    
-    # Получаем эклиптическую долготу
-    ecl_long = float(moon.hlong) * 180 / ephem.pi
-    
-    # Определяем знак зодиака
-    zodiac_signs = [
-        "♈️ Овен", "♉️ Телец", "♊️ Близнецы", "♋️ Рак",
-        "♌️ Лев", "♍️ Дева", "♎️ Весы", "♏️ Скорпион",
-        "♐️ Стрелец", "♑️ Козерог", "♒️ Водолей", "♓️ Рыбы"
-    ]
-    
-    sign_index = int(ecl_long / 30)
-    return zodiac_signs[sign_index % 12]
+    def _get_phase_name(self, phase: float) -> Dict[str, str]:
+        """Определение названия и эмодзи фазы луны"""
+        if 0 <= phase < 0.05 or phase > 0.95:
+            return {"name": "Новолуние", "emoji": "🌑"}
+        elif 0.05 <= phase < 0.25:
+            return {"name": "Растущий месяц", "emoji": "🌒"}
+        elif 0.25 <= phase < 0.35:
+            return {"name": "Первая четверть", "emoji": "🌓"}
+        elif 0.35 <= phase < 0.45:
+            return {"name": "Растущая луна", "emoji": "🌔"}
+        elif 0.45 <= phase < 0.55:
+            return {"name": "Полнолуние", "emoji": "🌕"}
+        elif 0.55 <= phase < 0.65:
+            return {"name": "Убывающая луна", "emoji": "🌖"}
+        elif 0.65 <= phase < 0.75:
+            return {"name": "Последняя четверть", "emoji": "🌗"}
+        else:
+            return {"name": "Убывающий месяц", "emoji": "🌘"}
 
-def get_lunar_recommendations(phase_name: str) -> str:
-    """Получает рекомендации в зависимости от фазы луны"""
-    recommendations = {
-        "🌑 Новолуние": (
-            "• Идеальное время для новых начинаний\n"
-            "• Составляйте планы и ставьте цели\n"
-            "• Хорошо начинать диету или новые привычки"
-        ),
-        "🌒 Растущая луна": (
-            "• Благоприятное время для роста и развития\n"
-            "• Начинайте новые проекты\n"
-            "• Хорошо для обучения и инвестиций"
-        ),
-        "🌓 Первая четверть": (
-            "• Время активных действий\n"
-            "• Преодолевайте препятствия\n"
-            "• Хорошо для важных решений"
-        ),
-        "🌕 Полнолуние": (
-            "• Пик энергии и эмоций\n"
-            "• Завершайте важные дела\n"
-            "• Будьте осторожны и внимательны"
-        ),
-        "🌗 Последняя четверть": (
-            "• Время для анализа и подведения итогов\n"
-            "• Хорошо для планирования\n"
-            "• Избегайте важных начинаний"
-        ),
-        "🌘 Убывающая луна": (
-            "• Завершайте проекты\n"
-            "• Хорошо для очищения и отдыха\n"
-            "• Избавляйтесь от ненужного"
-        )
-    }
-    return recommendations.get(phase_name, "Наблюдайте за своим состоянием.")
+    def _calculate_moon_distance(self, time) -> float:
+        """Расчет расстояния до луны в километрах"""
+        moon_pos = self.moon.at(time)
+        earth_pos = self.earth.at(time)
+        distance = moon_pos - earth_pos
+        return distance.km
+
+    def _get_moon_zodiac(self, time) -> str:
+        """Определение знака зодиака луны"""
+        moon_pos = self.moon.at(time)
+        ecliptic = moon_pos.ecliptic_latlon()
+        lon = ecliptic[1].degrees
+        
+        zodiac_signs = [
+            "♈️ Овен", "♉️ Телец", "♊️ Близнецы", "♋️ Рак",
+            "♌️ Лев", "♍️ Дева", "♎️ Весы", "♏️ Скорпион",
+            "♐️ Стрелец", "♑️ Козерог", "♒️ Водолей", "♓️ Рыбы"
+        ]
+        
+        sign_index = int(lon / 30) % 12
+        return zodiac_signs[sign_index]
 
 def get_lunar_text() -> str:
-    """Формирует текст о текущем состоянии луны"""
+    """Получение текстовой информации о луне"""
     try:
-        phase = get_moon_phase()
-        phase_name = get_moon_phase_name(phase)
-        moon_day = get_moon_day()
-        moon_sign = get_moon_sign()
-        recommendations = get_lunar_recommendations(phase_name)
+        calendar = LunarCalendar()
+        moon_info = calendar.get_moon_info()
         
-        text = (
-            f"*Фаза луны:* {phase_name}\n"
-            f"*Лунный день:* {moon_day}\n"
-            f"*Луна в знаке:* {moon_sign}\n\n"
-            f"*Рекомендации:*\n{recommendations}"
+        moscow_time = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%d.%m.%Y %H:%M")
+        
+        return (
+            f"{moon_info['emoji']} Лунный календарь\n\n"
+            f"Фаза: {moon_info['phase']}\n"
+            f"Освещенность: {moon_info['illumination']:.1f}%\n"
+            f"Луна в знаке: {moon_info['zodiac']}\n"
+            f"Луна {'растущая' if moon_info['growing'] else 'убывающая'}\n"
+            f"Расстояние: {moon_info['distance']:,.0f} км\n\n"
+            f"Время: {moscow_time} (МСК)"
         )
-        
-        return text
+
     except Exception as e:
-        return f"Ошибка при получении лунных данных: {str(e)}"
+        logger.error(f"Ошибка при формировании лунного календаря: {e}")
+        return "⚠️ Извините, не удалось получить данные о луне"
+
+if __name__ == "__main__":
+    print(get_lunar_text())
