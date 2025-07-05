@@ -1,3 +1,4 @@
+# Main packages
 python-telegram-bot[webhooks]==20.0
 python-dotenv==1.0.0
 APScheduler==3.10.1
