@@ -1,5 +1,6 @@
 # handlers/menu.py
 
+import logging
 from telegram import (
     Update,
     InlineKeyboardMarkup,
@@ -7,7 +8,6 @@ from telegram import (
 )
 from telegram.ext import ContextTypes
 from telegram.error import BadRequest
-import logging
 
 # 📥 Импорт клавиатур
 from keyboards import (
@@ -16,29 +16,31 @@ from keyboards import (
     get_back_to_menu_inline
 )
 
-# 📥 Импорт обработчиков/сценариев
+# 📥 Импорт обработчиков
 from services.lunar import get_lunar_text
 from handlers.horoscope import horoscope_today, horoscope_tomorrow, handle_zodiac_callback
 from handlers.tarot import tarot, tarot3
 from handlers.tarot5 import tarot5
 from handlers.compatibility import compatibility
 from handlers.subscribe import subscribe
+from handlers.magic8 import start_magic_8ball, show_magic_8ball_answer  # ✅ магический шар
 
 logger = logging.getLogger(__name__)
-    
 
-# 🏠 Клавиатура главного меню (Inline)
+
+# 🏠 Главное меню (Inline клавиатура)
 def get_main_menu_inline_keyboard():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🌞 Гороскоп", callback_data="horoscope_menu")],
         [InlineKeyboardButton("🃏 Таро", callback_data="tarot_menu")],
         [InlineKeyboardButton("🌙 Лунный календарь", callback_data="moon")],
         [InlineKeyboardButton("❤️ Совместимость", callback_data="compatibility")],
+        [InlineKeyboardButton("🧿 Магический шар", callback_data="magic_8ball")],  # ✅ новое
         [InlineKeyboardButton("🔔 Подписка", callback_data="subscribe")]
     ])
 
 
-# 🔮 Inline меню для гороскопов
+# 🔮 Подменю для гороскопов
 def get_horoscope_menu_inline():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✨ Сегодня", callback_data="horoscope_today")],
@@ -47,7 +49,7 @@ def get_horoscope_menu_inline():
     ])
 
 
-# 🃏 Inline меню для Таро
+# 🃏 Подменю для Таро
 def get_tarot_menu_inline():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🃏 Карта дня", callback_data="tarot")],
@@ -57,7 +59,7 @@ def get_tarot_menu_inline():
     ])
 
 
-# 🔹 /start и /menu — главное меню
+# 🔹 Старт бота: /start, /menu, "🏠 Главное меню"
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = "👋 Привет! Это меню AstroBot. Выберите действие:"
     try:
@@ -79,15 +81,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=get_main_menu_keyboard()
             )
     except Exception as e:
-        logger.exception("Ошибка в команде /start")
-        err = f"Произошла ошибка: {e}"
+        logger.exception("Ошибка в /start")
+        error_text = f"Произошла ошибка: {e}"
         if update.callback_query:
-            await update.callback_query.message.reply_text(err)
+            await update.callback_query.message.reply_text(error_text)
         else:
-            await update.message.reply_text(err)
+            await update.message.reply_text(error_text)
 
 
-# 🔘 Обработчик Inline-кнопок (callback_query)
+# 🔘 Inline-кнопки (callback_query)
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     data = query.data
@@ -117,6 +119,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             case "subscribe":
                 await subscribe(update, context)
+
+            case "magic_8ball":
+                await start_magic_8ball(update, context)
+
+            case "magic_8ball_answer" | "magic_8ball_repeat":
+                await show_magic_8ball_answer(update, context)
 
             case _ if data.startswith("subscribe_"):
                 from handlers.subscribe import handle_subscription_callback
@@ -158,10 +166,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         logger.exception("Ошибка в button_handler")
-        await query.message.reply_text(f"⚠️ Произошла ошибка: {e}")
+        await query.message.reply_text("⚠️ Произошла ошибка. Вернитесь в меню.", reply_markup=get_back_to_menu_inline())
 
 
-# 💬 Обработка reply-кнопок (обычных сообщений)
+# 💬 Обработка обычных reply-кнопок / текстов
 async def reply_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         if not update.message or not update.message.text:
@@ -191,7 +199,10 @@ async def reply_command_handler(update: Update, context: ContextTypes.DEFAULT_TY
             case "🔔 подписка":
                 await subscribe(update, context)
 
-            case "🏠 главное меню" | "/menu":
+            case "🧿 магический шар":
+                await start_magic_8ball(update, context)
+
+            case "🏠 главное меню" | "/menu" | "/start":
                 await start(update, context)
 
             case _:
@@ -202,4 +213,4 @@ async def reply_command_handler(update: Update, context: ContextTypes.DEFAULT_TY
 
     except Exception as e:
         logger.exception("Ошибка в reply_command_handler")
-        await update.message.reply_text(f"⚠️ Произошла ошибка: {e}")
+        await update.message.reply_text("⚠️ Произошла ошибка.", reply_markup=get_main_menu_keyboard())
