@@ -12,7 +12,7 @@ from telegram import (
 from telegram.constants import ChatAction
 from telegram.ext import ContextTypes
 
-from keyboards import get_main_menu_keyboard, get_main_menu_inline_keyboard
+from keyboards import get_main_menu_keyboard
 
 logger = logging.getLogger(__name__)
 
