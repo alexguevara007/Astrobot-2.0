@@ -28,6 +28,7 @@ def get_main_menu_inline_keyboard():
         [InlineKeyboardButton("🌞 Гороскоп", callback_data="horoscope_menu")],
         [InlineKeyboardButton("🃏 Таро", callback_data="tarot_menu")],
         [InlineKeyboardButton("🌙 Лунный календарь", callback_data="moon")],
+        [InlineKeyboardButton("❤️ Совместимость", callback_data="compatibility")],
         [InlineKeyboardButton("🔔 Подписка", callback_data="subscribe")]
     ])
 
@@ -47,7 +48,6 @@ def get_tarot_menu_inline():
         [InlineKeyboardButton("🃏 Карта дня", callback_data="tarot")],
         [InlineKeyboardButton("🔮 Расклад из 3", callback_data="tarot3")],
         [InlineKeyboardButton("🔮 Расклад из 5", callback_data="tarot5")],
-        [InlineKeyboardButton("❤️ Совместимость", callback_data="compatibility")],
         [InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")]
     ])
 
