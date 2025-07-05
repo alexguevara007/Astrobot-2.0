@@ -5,6 +5,10 @@ AstroBot — Telegram ассистент по гороскопам, Таро и 
 import os
 import time
 import logging
+import asyncio
+import aiohttp
+import psutil
+from datetime import datetime
 from aiohttp import web
 from dotenv import load_dotenv
 from telegram import Update, Bot
@@ -37,6 +41,8 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 PORT = int(os.getenv("PORT", 8080))
 RENDER_URL = "https://astrobot-2-0.onrender.com"
+KEEP_ALIVE_INTERVAL = 840  # 14 минут
+START_TIME = datetime.now()
 
 if not BOT_TOKEN:
     logger.critical("❌ BOT_TOKEN не найден в .env")
@@ -44,6 +50,39 @@ if not BOT_TOKEN:
 
 # Создаем глобальную переменную для приложения
 application = None
+
+def get_memory_usage():
+    """Получение информации об использовании памяти"""
+    process = psutil.Process()
+    memory_info = process.memory_info()
+    return {
+        "rss": f"{memory_info.rss / 1024 / 1024:.1f}MB",
+        "vms": f"{memory_info.vms / 1024 / 1024:.1f}MB"
+    }
+
+def get_uptime():
+    """Получение времени работы сервера"""
+    uptime = datetime.now() - START_TIME
+    days = uptime.days
+    hours, remainder = divmod(uptime.seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return f"{days}d {hours}h {minutes}m {seconds}s"
+
+async def keep_alive():
+    """Функция для поддержания активности сервера"""
+    logger.info("Keep-alive механизм запущен")
+    async with aiohttp.ClientSession() as session:
+        while True:
+            try:
+                async with session.get(f"{RENDER_URL}/") as response:
+                    if response.status == 200:
+                        logger.info(f"Keep-alive пинг успешен: {datetime.now()}")
+                    else:
+                        logger.warning(f"Keep-alive пинг вернул статус {response.status}")
+            except Exception as e:
+                logger.error(f"Ошибка keep-alive пинга: {e}")
+            
+            await asyncio.sleep(KEEP_ALIVE_INTERVAL)
 
 # === ⛑ Глобальный обработчик ошибок ===
 async def error_handler(update, context: ContextTypes.DEFAULT_TYPE):
@@ -74,22 +113,36 @@ async def webhook_handler(request):
 
 # === Health check ===
 async def health_check(request):
-    """Проверка работоспособности сервиса"""
+    """Расширенный health check"""
     try:
+        start_time = datetime.now()
         webhook_info = await application.bot.get_webhook_info()
         bot_info = await application.bot.get_me()
+        response_time = (datetime.now() - start_time).total_seconds()
+
         return web.json_response({
             "status": "running",
-            "bot_username": bot_info.username,
-            "webhook_url": webhook_info.url,
-            "webhook_pending_update_count": webhook_info.pending_update_count,
-            "timestamp": time.time(),
-            "service": "AstroBot",
+            "timestamp": datetime.now().isoformat(),
+            "bot": {
+                "username": bot_info.username,
+                "id": bot_info.id,
+                "webhook_url": webhook_info.url,
+                "pending_updates": webhook_info.pending_update_count
+            },
+            "performance": {
+                "response_time": f"{response_time:.3f}s",
+                "memory_usage": get_memory_usage()
+            },
+            "uptime": get_uptime(),
             "version": "2.0"
         })
     except Exception as e:
-        logger.error(f"Ошибка в health_check: {e}")
-        return web.json_response({"status": "error", "error": str(e)}, status=500)
+        logger.error(f"Ошибка в health check: {e}")
+        return web.json_response({
+            "status": "error",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }, status=500)
 
 # === Настройка бота ===
 async def setup_bot():
@@ -180,6 +233,9 @@ async def main():
         
         app.router.add_get("/", health_check)
         app.router.add_post(webhook_path, webhook_handler)
+        
+        # Запускаем keep-alive в отдельной таске
+        asyncio.create_task(keep_alive())
         
         logger.info("🌐 Веб-сервер настроен")
         return app
