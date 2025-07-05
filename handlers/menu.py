@@ -5,6 +5,7 @@ from telegram import (
 )
 from telegram.ext import ContextTypes
 from telegram.error import BadRequest
+import logging
 
 # 📥 Импорт клавиатур
 from keyboards import (
@@ -21,6 +22,7 @@ from handlers.tarot5 import tarot5
 from handlers.compatibility import compatibility
 from handlers.subscribe import subscribe
 
+logger = logging.getLogger(__name__)
 
 # 🏠 Inline клавиатура главного меню
 def get_main_menu_inline_keyboard():
@@ -74,6 +76,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=get_main_menu_keyboard()
             )
     except Exception as e:
+        logger.error(f"Ошибка в команде start: {e}")
         err = f"Произошла ошибка: {e}"
         if update.callback_query:
             await update.callback_query.message.reply_text(err)
@@ -87,27 +90,53 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
 
     try:
-        await query.answer()
+        # Сразу отвечаем на callback query
+        try:
+            await query.answer()
+        except Exception as e:
+            logger.error(f"Ошибка ответа на callback query: {e}")
 
         match data:
             case "horoscope_menu":
-                await query.message.edit_text(
-                    "🔮 Выберите тип гороскопа:",
-                    reply_markup=get_horoscope_menu_inline()
-                )
+                try:
+                    await query.message.edit_text(
+                        "🔮 Выберите тип гороскопа:",
+                        reply_markup=get_horoscope_menu_inline()
+                    )
+                except BadRequest as e:
+                    if "message is not modified" in str(e):
+                        pass
+                    else:
+                        await query.message.reply_text(
+                            "🔮 Выберите тип гороскопа:",
+                            reply_markup=get_horoscope_menu_inline()
+                        )
 
             case "tarot_menu":
-                await query.message.edit_text(
-                    "🃏 Таро-расклады:",
-                    reply_markup=get_tarot_menu_inline()
-                )
+                try:
+                    await query.message.edit_text(
+                        "🃏 Таро-расклады:",
+                        reply_markup=get_tarot_menu_inline()
+                    )
+                except BadRequest as e:
+                    if "message is not modified" not in str(e):
+                        await query.message.reply_text(
+                            "🃏 Таро-расклады:",
+                            reply_markup=get_tarot_menu_inline()
+                        )
 
             case "moon":
                 text = get_lunar_text()
-                await query.message.edit_text(
-                    f"🌙 Лунный календарь:\n\n{text}",
-                    reply_markup=get_back_to_menu_inline()
-                )
+                try:
+                    await query.message.edit_text(
+                        f"🌙 Лунный календарь:\n\n{text}",
+                        reply_markup=get_back_to_menu_inline()
+                    )
+                except BadRequest:
+                    await query.message.reply_text(
+                        f"🌙 Лунный календарь:\n\n{text}",
+                        reply_markup=get_back_to_menu_inline()
+                    )
 
             case "subscribe":
                 await subscribe(update, context)
@@ -120,19 +149,38 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await compatibility(update, context)
 
             case "main_menu" | "back_to_menu":
-                await start(update, context)
+                try:
+                    await start(update, context)
+                except BadRequest:
+                    if update.callback_query:
+                        await update.callback_query.message.reply_text(
+                            "👋 Главное меню:",
+                            reply_markup=get_main_menu_inline_keyboard()
+                        )
 
             case "horoscope_today":
-                await query.message.edit_text(
-                    "🔮 Выберите знак зодиака:",
-                    reply_markup=get_zodiac_inline_keyboard("horoscope")
-                )
+                try:
+                    await query.message.edit_text(
+                        "🔮 Выберите знак зодиака:",
+                        reply_markup=get_zodiac_inline_keyboard("horoscope")
+                    )
+                except BadRequest:
+                    await query.message.reply_text(
+                        "🔮 Выберите знак зодиака:",
+                        reply_markup=get_zodiac_inline_keyboard("horoscope")
+                    )
 
             case "horoscope_tomorrow":
-                await query.message.edit_text(
-                    "🌜 Выберите знак зодиака:",
-                    reply_markup=get_zodiac_inline_keyboard("horoscope_tomorrow")
-                )
+                try:
+                    await query.message.edit_text(
+                        "🌜 Выберите знак зодиака:",
+                        reply_markup=get_zodiac_inline_keyboard("horoscope_tomorrow")
+                    )
+                except BadRequest:
+                    await query.message.reply_text(
+                        "🌜 Выберите знак зодиака:",
+                        reply_markup=get_zodiac_inline_keyboard("horoscope_tomorrow")
+                    )
 
             case "tarot":
                 await tarot(update, context)
@@ -145,13 +193,26 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await handle_zodiac_callback(update, context)
 
             case _:
-                await query.message.edit_text(
-                    "⚠️ Неизвестная команда. Вернитесь в главное меню:",
-                    reply_markup=get_back_to_menu_inline()
-                )
+                try:
+                    await query.message.edit_text(
+                        "⚠️ Неизвестная команда. Вернитесь в главное меню:",
+                        reply_markup=get_back_to_menu_inline()
+                    )
+                except BadRequest:
+                    await query.message.reply_text(
+                        "⚠️ Неизвестная команда. Вернитесь в главное меню:",
+                        reply_markup=get_back_to_menu_inline()
+                    )
 
     except Exception as e:
-        await query.message.reply_text(f"Произошла ошибка: {e}")
+        logger.error(f"Ошибка в обработчике кнопок: {e}")
+        try:
+            await query.message.reply_text(
+                "⚠️ Произошла ошибка. Попробуйте вернуться в главное меню:",
+                reply_markup=get_back_to_menu_inline()
+            )
+        except Exception as e:
+            logger.error(f"Критическая ошибка при обработке ошибки: {e}")
 
 
 # 💬 Reply-кнопки
@@ -186,4 +247,5 @@ async def reply_command_handler(update: Update, context: ContextTypes.DEFAULT_TY
                 )
 
     except Exception as e:
+        logger.error(f"Ошибка в обработчике текстовых команд: {e}")
         await update.message.reply_text(f"Произошла ошибка: {e}")
