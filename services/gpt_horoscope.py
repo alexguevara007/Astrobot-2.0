@@ -6,7 +6,6 @@ from datetime import date, timedelta
 from services.lunar import get_lunar_text
 from services.yandex_gpt import generate_text_with_system
 
-# Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -35,25 +34,41 @@ def pick_tone():
         k=1
     )[0]
 
-def generate_horoscope(sign: str, day: str = "today", detailed: bool = False):
+def generate_horoscope(sign: str, day: str = "today", detailed: bool = False, hybrid: bool = True):
     try:
         today = date.today()
         target = today if day == "today" else today + timedelta(days=1)
         date_str = str(target)
         sign = sign.lower()
 
+        # Загрузка кэша
         cache = load_cache()
         cache_key = f"{'detailed' if detailed else 'brief'}_{sign}_{day}"
 
-        # 📌 Проверка: если в кэше уже есть — возвращаем
+        # Проверка в кэше
         if sign in cache and cache_key in cache[sign] and cache[sign][cache_key]["date"] == date_str:
             logger.info(f"Из кэша: {sign} на {day}")
             return cache[sign][cache_key]["text"]
 
-        # 🔮 Выбираем тон прогноза (эмоциональный окрас)
-        tone = pick_tone()
+        # 🔀 Если используется гибридная генерация
+        if hybrid:
+            from services.gpt_horoscope_hybrid import generate_hybrid_horoscope
+            logger.info(f"Генерация гибридного гороскопа: sign={sign}, day={day}, detailed={detailed}")
+            result_text = generate_hybrid_horoscope(sign, day, detailed)
 
-        # 🧠 Системный промпт в зависимости от тона
+            if sign not in cache:
+                cache[sign] = {}
+            cache[sign][cache_key] = {
+                "date": date_str,
+                "text": result_text,
+                "tone": "hybrid"
+            }
+            save_cache(cache)
+
+            return result_text
+
+        # 🔮 Классическая генерация через GPT
+        tone = pick_tone()
         tone_instruction = {
             "positive": "в целом благоприятный, вдохновляющий, но реалистичный",
             "neutral": "сбалансированный, спокойный, с акцентом на самонаблюдение",
@@ -69,7 +84,7 @@ def generate_horoscope(sign: str, day: str = "today", detailed: bool = False):
         if detailed:
             user_prompt = f"""Составь подробный гороскоп на {label} для знака зодиака {sign.title()}.
 
-Учитывай, что стиль должен быть {tone_instruction[tone]}.
+Тон: {tone_instruction[tone]}.
 
 ⛅ Структура гороскопа:
 1. 🌟 Общая энергия дня
@@ -82,22 +97,22 @@ def generate_horoscope(sign: str, day: str = "today", detailed: bool = False):
 8. 👥 Взаимодействие с окружающими
 9. 🎯 Эмоциональный вектор дня
 
-Используй эмодзи и делай текст живым и не как робот."""
+Добавь эмодзи, избегай банальностей, пиши живо и понятно."""
         else:
-            user_prompt = f"""Напиши краткий гороскоп на {label} для знака зодиака {sign.title()}.
+            user_prompt = f"""Напиши краткий гороскоп на {label} для знака {sign.title()}.
 Тон: {tone_instruction[tone]}.
 
-💡 Включи 3 пункта:
-1. Главное ощущение и фон дня
-2. Короткий совет
-3. Когда лучше всего принять важные решения
+Включи 3 пункта:
+1. Главное ощущение дня
+2. Совет на день
+3. В какое время лучше принимать важные решения
 
-Не используй общий стиль для всех — сделай уникально и жизненно."""
+Избегай шаблонов — будь уникальным и человечным."""
 
-        # ✅ Генерация текста с GPT
-        logger.info(f"Генерация гороскопа: {sign}, {day}, тон: {tone}")
+        logger.info(f"Генерация классического гороскопа: {sign}, {day}, тон: {tone}")
         gpt_text = generate_text_with_system(system_prompt, user_prompt)
 
+        # Добавляем лунный календарь в detailed режиме
         if detailed:
             try:
                 lunar = get_lunar_text()
@@ -108,7 +123,7 @@ def generate_horoscope(sign: str, day: str = "today", detailed: bool = False):
         else:
             full_text = gpt_text
 
-        # ✅ Сохраняем результат в кэш
+        # Сохраняем в кэш
         if sign not in cache:
             cache[sign] = {}
         cache[sign][cache_key] = {
@@ -123,6 +138,7 @@ def generate_horoscope(sign: str, day: str = "today", detailed: bool = False):
     except Exception as e:
         logger.exception("Ошибка при генерации гороскопа")
         return "⚠️ Не удалось сгенерировать гороскоп. Попробуйте позже."
+
 
 def clear_old_cache():
     """Удаляет устаревшие гороскопы"""
@@ -139,6 +155,6 @@ def clear_old_cache():
 
         save_cache(cache)
         logger.info("✅ Старые кэшированные гороскопы удалены")
-        
+
     except Exception as e:
         logger.error(f"Ошибка при очистке кэша: {e}")
