@@ -13,8 +13,9 @@ from services.astroseek_scraper import get_day_energy_description
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Кэш для гороскопов (max 1000 записей, TTL зависит от day)
-horoscope_cache = TTLCache(maxsize=1000, ttl=86400)  # Default TTL 24 часа
+# Кэши для гороскопов с разными TTL (max 1000 записей каждый)
+daily_cache = TTLCache(maxsize=1000, ttl=86400)  # 24 часа для today/tomorrow
+weekly_cache = TTLCache(maxsize=1000, ttl=604800)  # 7 дней для week
 
 # Соответствие имени знака и id на сайте
 SIGN_MAP = {
@@ -68,88 +69,4 @@ def generate_horoscope(sign: str, day: str = "today", detailed: bool = False) ->
     Финальная генерация гороскопа с кэшированием:
     - парсим гороскоп
     - переводим
-    - перефразируем через GPT
-    - добавляем лунный и энергетический контекст
-    """
-    # Ключ для кэша
-    cache_key = f"{sign.lower()}_{day}_{detailed}"
-
-    # Установка TTL в зависимости от day
-    if day == "week":
-        horoscope_cache.ttl = 604800  # 7 дней
-    else:
-        horoscope_cache.ttl = 86400  # 24 часа
-
-    # Проверка кэша
-    if cache_key in horoscope_cache:
-        logger.info(f"Гороскоп для {sign} ({day}, detailed={detailed}) взят из кэша.")
-        return horoscope_cache[cache_key]
-
-    try:
-        # 1. Парсинг оригинала
-        original_text_en = fetch_horoscope_from_site(sign, day)
-        if original_text_en.startswith("⚠️") or original_text_en.startswith("🚫"):
-            return original_text_en
-
-        # 2. Перевод
-        translated_text = translate_text(original_text_en, target_lang="ru")
-
-        # 3. Дополнительный контекст — Луна и энергия дня
-        target_date = date.today() if day == "today" else date.today() + timedelta(days=1)
-        lunar_info = get_lunar_info(target_date)
-        energy = get_day_energy_description()
-
-        moon_context = f"Луна в {lunar_info['moon_sign']}, фаза: {lunar_info['phase_text']}, {lunar_info['moon_phase']}%"
-        energy_context = f"Энергия дня: {energy or 'не определена'}"
-
-        # 4. Генерация стиля и интро
-        tone = random.choice(REPHRASE_TONES)
-        intro = random.choice(START_INTROS)
-
-        # 5. Формируем promt
-        system_prompt = (
-            "Ты создаешь персональные гороскопы на русском языке. "
-            "Пиши по-настоящему: искренне, без клише, без эзотерики. "
-            "Текст должен быть интересным, человечным и легко воспринимаемым."
-        )
-
-        user_prompt = f"""
-Вот перевод гороскопа:
-
-\"\"\"{translated_text}\"\"\"
-
-Перепиши его в стиле — {tone}.
-Избегай штампов и банальностей. Пиши по-человечески, как будто обращаешься к одному человеку.
-Учитывай этот контекст дня:
-
-- {moon_context}
-- {energy_context}
-"""
-
-        # 6. Генерация финального текста с ограничением temperature [0.9, 1.0]
-        temperature = random.uniform(0.9, 1.0)  # Ограничено до 1.0, чтобы избежать ошибки 400 в Yandex GPT
-        logger.info(f"Генерация GPT с temperature={temperature:.2f}")
-
-        try:
-            gpt_response = generate_text_with_system(
-                system_prompt=system_prompt,
-                user_prompt=user_prompt.strip(),
-                temperature=temperature,  # Уже ограничено
-                max_tokens=1000 if detailed else 500  # Контроль длины в зависимости от detailed
-            )
-            if not gpt_response:  # Если GPT вернул пустую строку (fallback)
-                raise ValueError("GPT вернул пустой ответ")
-            final_text = f"{intro}\n\n{gpt_response.strip()}"
-        except Exception as e:
-            logger.warning(f"GPT недоступен. Используем перевод. {e}")
-            final_text = f"{intro}\n\n{translated_text.strip()}"
-
-        # Кэшируем результат
-        horoscope_cache[cache_key] = final_text
-        logger.info(f"Гороскоп для {sign} ({day}, detailed={detailed}) сгенерирован и закеширован.")
-
-        return final_text
-
-    except Exception as e:
-        logger.exception("Ошибка при генерации гороскопа")
-        return "⚠️ Не удалось сгенерировать гороскоп. Попробуйте позже."
+    - 
