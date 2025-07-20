@@ -4,7 +4,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from services.user_tracker import get_user_stats_by_day, get_user_count
 
-ADMIN_IDS = [123456789]  # 👉 Замени на свой Telegram user_id
+ADMIN_IDS = [306285013]  
 
 async def new_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
