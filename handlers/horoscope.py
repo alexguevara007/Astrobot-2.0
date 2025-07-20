@@ -5,12 +5,12 @@ import logging
 import time
 from datetime import datetime
 
-from services.generate_horoscope import generate_horoscope  # ✅ Обновлённый единственный генератор
+from services.generate_horoscope import generate_horoscope
 from keyboards import get_zodiac_inline_keyboard, get_back_to_menu_inline
+from locales import get_text
 
 logger = logging.getLogger(__name__)
 
-# Карта знаков зодиака
 ZODIAC_SIGNS = {
     "овен":      {"eng": "aries",       "emoji": "♈️", "element": "🔥 Огонь",    "planet": "♂️ Марс"},
     "телец":     {"eng": "taurus",      "emoji": "♉️", "element": "🌍 Земля",    "planet": "♀️ Венера"},
@@ -27,27 +27,28 @@ ZODIAC_SIGNS = {
 }
 
 
-def get_horoscope_actions_keyboard(sign: str, day: str, detailed: bool = False):
+def get_horoscope_actions_keyboard(sign: str, day: str, detailed: bool = False, lang: str = 'ru'):
     buttons = []
 
     if not detailed:
         buttons.append([
-            InlineKeyboardButton("📝 Подробнее", callback_data=f"horoscope:{sign}:{day}:true")
+            InlineKeyboardButton(get_text('detailed_button', lang), callback_data=f"horoscope:{sign}:{day}:true")
         ])
 
     buttons.extend([
-        [InlineKeyboardButton("🔮 Другой знак", callback_data=f"horoscope_menu:{day}")],
-        [InlineKeyboardButton("« Назад в меню", callback_data="main_menu")]
+        [InlineKeyboardButton(get_text('another_sign', lang), callback_data=f"horoscope_menu:{day}")],
+        [InlineKeyboardButton(get_text('back_to_menu', lang), callback_data="main_menu")]
     ])
     
     return InlineKeyboardMarkup(buttons)
 
 
-async def send_horoscope(update_or_query, sign: str, day: str, detailed: bool = False):
+async def send_horoscope(update_or_query, context: ContextTypes.DEFAULT_TYPE, sign: str, day: str, detailed: bool = False):
+    lang = context.user_data.get('lang', 'ru')
     sign_lower = sign.lower()
 
     if sign_lower not in ZODIAC_SIGNS:
-        text = "🚫 Неверный знак зодиака. Попробуйте ещё раз."
+        text = get_text('invalid_sign', lang)
         reply_markup = get_zodiac_inline_keyboard("horoscope")
         if hasattr(update_or_query, 'message'):
             await update_or_query.message.reply_text(text, reply_markup=reply_markup)
@@ -57,49 +58,42 @@ async def send_horoscope(update_or_query, sign: str, day: str, detailed: bool = 
 
     sign_info = ZODIAC_SIGNS[sign_lower]
 
-    loading_text = (
-        f"{sign_info['emoji']} Генерация гороскопа для {sign.title()}\n"
-        f"Стихия: {sign_info['element']}\n"
-        f"Управитель: {sign_info['planet']}\n\n"
-        "⏳ Пожалуйста, подождите..."
-    )
+    loading_text = get_text('horoscope_loading', lang, emoji=sign_info['emoji'], sign=sign.title(),
+                            element=sign_info['element'], planet=sign_info['planet'])
 
     if hasattr(update_or_query, 'message'):
         message = await update_or_query.message.reply_text(loading_text)
     else:
         message = await update_or_query.edit_message_text(loading_text)
 
-    # Генерация гороскопа
     try:
         start_time = time.time()
-        horoscope_text = generate_horoscope(sign_info["eng"], day=day, detailed=detailed)
+        horoscope_text = generate_horoscope(sign_info["eng"], day=day, detailed=detailed, lang=lang)
         duration = time.time() - start_time
         logger.info(f"Гороскоп для {sign} сгенерирован за {duration:.2f} сек")
     except Exception as e:
         logger.error(f"Ошибка генерации гороскопа: {e}")
         await message.edit_text(
-            "⚠️ Ошибка при генерации гороскопа. Попробуйте позже.",
+            get_text('horoscope_error', lang),
             reply_markup=get_back_to_menu_inline()
         )
         return
 
-    day_text = "сегодня" if day == "today" else "завтра"
+    day_text = get_text(f'day_{day}', lang)
     current_date = datetime.now().strftime("%d.%m.%Y")
 
-    header = (
-        f"{sign_info['emoji']} <b>{sign.title()}</b>\n"
-        f"Стихия: {sign_info['element']}\n"
-        f"Планета: {sign_info['planet']}\n"
-        f"<b>{'Подробный' if detailed else 'Краткий'} гороскоп на {day_text} ({current_date})</b>\n"
-        f"{'─' * 30}\n\n"
-    )
+    detailed_type = get_text('detailed_type_detailed' if detailed else 'detailed_type_short', lang)
+
+    header = get_text('horoscope_header', lang, emoji=sign_info['emoji'], sign=sign.title(),
+                      element=sign_info['element'], planet=sign_info['planet'],
+                      detailed_type=detailed_type, day_text=day_text, date=current_date)
 
     response = header + horoscope_text
 
     try:
         await message.edit_text(
             text=response,
-            reply_markup=get_horoscope_actions_keyboard(sign, day, detailed),
+            reply_markup=get_horoscope_actions_keyboard(sign, day, detailed, lang),
             parse_mode="HTML"
         )
     except BadRequest as e:
@@ -110,16 +104,16 @@ async def send_horoscope(update_or_query, sign: str, day: str, detailed: bool = 
                     await message.edit_text(part)
                 else:
                     await message.reply_text(part)
-            await message.reply_text("Выберите действие:", reply_markup=get_horoscope_actions_keyboard(sign, day, detailed))
+            await message.reply_text(get_text('choose_action', lang), reply_markup=get_horoscope_actions_keyboard(sign, day, detailed, lang))
         else:
             raise
 
 
-# Команды
 async def horoscope_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    lang = context.user_data.get('lang', 'ru')
     try:
         reply_markup = get_zodiac_inline_keyboard("horoscope")
-        text = "🔮 Выберите знак зодиака:"
+        text = get_text('zodiac_select', lang)
         if update.callback_query:
             await update.callback_query.answer()
             await update.callback_query.message.edit_text(text, reply_markup=reply_markup)
@@ -127,13 +121,14 @@ async def horoscope_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(text, reply_markup=reply_markup)
     except Exception as e:
         logger.error(f"horoscope_today error: {e}")
-        await update.effective_message.reply_text("⚠️ Ошибка. Попробуйте позже.", reply_markup=get_back_to_menu_inline())
+        await update.effective_message.reply_text(get_text('error', lang), reply_markup=get_back_to_menu_inline())
 
 
 async def horoscope_tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    lang = context.user_data.get('lang', 'ru')
     try:
         reply_markup = get_zodiac_inline_keyboard("horoscope_tomorrow")
-        text = "🌜 Выберите знак зодиака:"
+        text = get_text('zodiac_select_tomorrow', lang)
         if update.callback_query:
             await update.callback_query.answer()
             await update.callback_query.message.edit_text(text, reply_markup=reply_markup)
@@ -141,41 +136,39 @@ async def horoscope_tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await update.message.reply_text(text, reply_markup=reply_markup)
     except Exception as e:
         logger.error(f"horoscope_tomorrow error: {e}")
-        await update.effective_message.reply_text("⚠️ Ошибка. Попробуйте позже.", reply_markup=get_back_to_menu_inline())
+        await update.effective_message.reply_text(get_text('error', lang), reply_markup=get_back_to_menu_inline())
 
 
-# Обработка нажатий кнопок зодиака
 async def handle_zodiac_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    lang = context.user_data.get('lang', 'ru')
     try:
         query = update.callback_query
         await query.answer()
         data = query.data
 
         if ":" not in data:
-            await query.message.edit_text("⚠️ Неверные данные.", reply_markup=get_back_to_menu_inline())
+            await query.message.edit_text(get_text('invalid_data', lang), reply_markup=get_back_to_menu_inline())
             return
 
         parts = data.split(":")
 
-        # 🔁 Вернуться к выбору знака
         if parts[0] == "horoscope_menu":
             day = parts[1] if len(parts) > 1 else "today"
             markup = get_zodiac_inline_keyboard("horoscope_tomorrow" if day == "tomorrow" else "horoscope")
-            text = "🔮 Выберите знак зодиака:" if day == "today" else "🌜 Выберите знак зодиака:"
+            text = get_text('zodiac_select', lang) if day == "today" else get_text('zodiac_select_tomorrow', lang)
             await query.message.edit_text(text, reply_markup=markup)
             return
 
-        # 🤖 Обработка выбора знака и генерации гороскопа
         if len(parts) == 4:
             _, sign, day, detailed = parts
-            await send_horoscope(query, sign, day, detailed.lower() == "true")
+            await send_horoscope(query, context, sign, day, detailed.lower() == "true")
         elif len(parts) == 2:
             prefix, sign = parts
             day = "tomorrow" if prefix == "horoscope_tomorrow" else "today"
-            await send_horoscope(query, sign, day, detailed=False)
+            await send_horoscope(query, context, sign, day, detailed=False)
         else:
-            await query.message.edit_text("⚠️ Неверный формат данных гороскопа.", reply_markup=get_back_to_menu_inline())
+            await query.message.edit_text(get_text('invalid_format', lang), reply_markup=get_back_to_menu_inline())
 
     except Exception as e:
         logger.error(f"handle_zodiac_callback error: {e}")
-        await update.effective_message.reply_text("⚠️ Не удалось обработать запрос.", reply_markup=get_back_to_menu_inline())
+        await update.effective_message.reply_text(get_text('error', lang), reply_markup=get_back_to_menu_inline())
