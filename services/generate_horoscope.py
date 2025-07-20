@@ -108,21 +108,21 @@ def generate_horoscope(sign: str, day: str = "today", detailed: bool = False) ->
 - {energy_context}
 """
 
-        # 6. Генерация финального текста
+        # 6. Генерация финального текста с ограничением temperature [0.9, 1.0]
+        temperature = random.uniform(0.9, 1.0)  # Ограничено до 1.0, чтобы избежать ошибки 400 в Yandex GPT
+        logger.info(f"Генерация GPT с temperature={temperature:.2f}")
+
         try:
             gpt_response = generate_text_with_system(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt.strip(),
-                temperature=random.uniform(0.9, 1.25)
-                # Удалён top_p=1, так как Yandex GPT не поддерживает этот параметр
+                temperature=temperature,  # Уже ограничено
+                max_tokens=1000 if detailed else 500  # Контроль длины в зависимости от detailed
             )
+            if not gpt_response:  # Если GPT вернул пустую строку (fallback)
+                raise ValueError("GPT вернул пустой ответ")
             final_text = f"{intro}\n\n{gpt_response.strip()}"
-        except TypeError as te:
-            # Специально ловим ошибку с аргументами (например, если в будущем добавите неподдерживаемые kwargs)
-            logger.error(f"Ошибка в аргументах вызова GPT: {te}")
-            final_text = f"{intro}\n\n{translated_text.strip()}"
         except Exception as e:
-            # Для реальных ошибок API (недоступность, лимиты и т.д.)
             logger.warning(f"GPT недоступен. Используем перевод. {e}")
             final_text = f"{intro}\n\n{translated_text.strip()}"
 
