@@ -113,11 +113,16 @@ def generate_horoscope(sign: str, day: str = "today", detailed: bool = False) ->
             gpt_response = generate_text_with_system(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt.strip(),
-                temperature=random.uniform(0.9, 1.25),
-                top_p=1
+                temperature=random.uniform(0.9, 1.25)
+                # Удалён top_p=1, так как Yandex GPT не поддерживает этот параметр
             )
             final_text = f"{intro}\n\n{gpt_response.strip()}"
+        except TypeError as te:
+            # Специально ловим ошибку с аргументами (например, если в будущем добавите неподдерживаемые kwargs)
+            logger.error(f"Ошибка в аргументах вызова GPT: {te}")
+            final_text = f"{intro}\n\n{translated_text.strip()}"
         except Exception as e:
+            # Для реальных ошибок API (недоступность, лимиты и т.д.)
             logger.warning(f"GPT недоступен. Используем перевод. {e}")
             final_text = f"{intro}\n\n{translated_text.strip()}"
 
