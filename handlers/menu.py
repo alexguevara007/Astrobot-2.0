@@ -1,21 +1,14 @@
 import logging
-from telegram import (
-    Update,
-    InlineKeyboardMarkup,
-    InlineKeyboardButton
-)
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 from telegram.error import BadRequest
 
-# 🧠 Локальные клавиатуры
-from keyboards import (
-    get_main_menu_keyboard,
-    get_zodiac_inline_keyboard,
-    get_back_to_menu_inline
-)
+# 📦 Импорт систем
+from keyboards import get_main_menu_keyboard, get_zodiac_inline_keyboard, get_back_to_menu_inline
+from services.lunar import get_lunar_text
+from services.user_tracker import track_user  # ✅ Добавлено
 
 # 📥 Импорт обработчиков
-from services.lunar import get_lunar_text
 from handlers.horoscope import horoscope_today, horoscope_tomorrow, handle_zodiac_callback
 from handlers.tarot import tarot, tarot3
 from handlers.tarot5 import tarot5
@@ -59,6 +52,9 @@ def get_tarot_menu_inline():
 
 # 📲 Команда /menu или /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    track_user(user.id, user.username)  # ✅ Аналитика
+
     message = "👋 Привет! Это меню AstroBot. Выберите действие:"
     try:
         if update.callback_query:
@@ -83,7 +79,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.effective_message.reply_text(f"⚠️ Произошла ошибка: {e}")
 
 
-# 🔘 Inline-кнопки
+# 🔘 Обработка inline-кнопок
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     data = query.data
@@ -93,23 +89,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         match data:
             case "horoscope_menu":
-                await query.message.edit_text(
-                    "🔮 Выберите тип гороскопа:",
-                    reply_markup=get_horoscope_menu_inline()
-                )
+                await query.message.edit_text("🔮 Выберите тип гороскопа:", reply_markup=get_horoscope_menu_inline())
 
             case "tarot_menu":
-                await query.message.edit_text(
-                    "🃏 Таро-расклады:",
-                    reply_markup=get_tarot_menu_inline()
-                )
+                await query.message.edit_text("🃏 Таро-расклады:", reply_markup=get_tarot_menu_inline())
 
             case "moon":
                 text = get_lunar_text()
-                await query.message.edit_text(
-                    f"🌙 Лунный календарь:\n\n{text}",
-                    reply_markup=get_back_to_menu_inline()
-                )
+                await query.message.edit_text(f"🌙 Лунный календарь:\n\n{text}", reply_markup=get_back_to_menu_inline())
 
             case "subscribe":
                 await subscribe(update, context)
@@ -120,12 +107,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             case "magic_8ball_answer" | "magic_8ball_repeat":
                 await show_magic_8ball_answer(update, context)
 
+            case _ if data.startswith("compatibility"):
+                await compatibility(update, context)
+
             case _ if data.startswith("subscribe_"):
                 from handlers.subscribe import handle_subscription_callback
                 await handle_subscription_callback(update, context)
-
-            case _ if data.startswith("compatibility"):
-                await compatibility(update, context)
 
             case "main_menu" | "back_to_menu":
                 await start(update, context)
@@ -146,10 +133,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 day = data.split(":")[1] if ":" in data else "today"
                 prefix = "horoscope_tomorrow" if day == "tomorrow" else "horoscope"
                 title = "🌜 Выберите знак зодиака:" if day == "tomorrow" else "🔮 Выберите знак зодиака:"
-                await query.message.edit_text(
-                    title,
-                    reply_markup=get_zodiac_inline_keyboard(prefix)
-                )
+                await query.message.edit_text(title, reply_markup=get_zodiac_inline_keyboard(prefix))
 
             case "tarot":
                 await tarot(update, context)
@@ -162,10 +146,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await handle_zodiac_callback(update, context)
 
             case _:
-                await query.message.edit_text(
-                    "⚠️ Неизвестная команда. Вернитесь в меню:",
-                    reply_markup=get_back_to_menu_inline()
-                )
+                await query.message.edit_text("⚠️ Неизвестная команда. Вернитесь в меню:", reply_markup=get_back_to_menu_inline())
 
     except Exception as e:
         logger.exception("Ошибка в button_handler")
@@ -175,8 +156,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
-# 💬 Reply-кнопки и текстовые команды
+# 💬 Обработка reply-кнопок и текстовых команд
 async def reply_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    track_user(user.id, user.username)  # ✅ Трекинг через текстовую команду
+
     try:
         if not update.message or not update.message.text:
             return
