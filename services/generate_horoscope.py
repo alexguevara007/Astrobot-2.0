@@ -3,6 +3,7 @@ from datetime import date, timedelta
 import logging
 import requests
 from bs4 import BeautifulSoup
+from cachetools import TTLCache  # Для кэширования с TTL
 
 from services.yandex_translate import translate_text
 from services.yandex_gpt import generate_text_with_system
@@ -11,6 +12,9 @@ from services.astroseek_scraper import get_day_energy_description
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Кэш для гороскопов (max 1000 записей, TTL зависит от day)
+horoscope_cache = TTLCache(maxsize=1000, ttl=86400)  # Default TTL 24 часа
 
 # Соответствие имени знака и id на сайте
 SIGN_MAP = {
@@ -61,12 +65,26 @@ def fetch_horoscope_from_site(sign: str, day: str = "today") -> str:
 
 def generate_horoscope(sign: str, day: str = "today", detailed: bool = False) -> str:
     """
-    Финальная генерация гороскопа:
+    Финальная генерация гороскопа с кэшированием:
     - парсим гороскоп
     - переводим
     - перефразируем через GPT
     - добавляем лунный и энергетический контекст
     """
+    # Ключ для кэша
+    cache_key = f"{sign.lower()}_{day}_{detailed}"
+
+    # Установка TTL в зависимости от day
+    if day == "week":
+        horoscope_cache.ttl = 604800  # 7 дней
+    else:
+        horoscope_cache.ttl = 86400  # 24 часа
+
+    # Проверка кэша
+    if cache_key in horoscope_cache:
+        logger.info(f"Гороскоп для {sign} ({day}, detailed={detailed}) взят из кэша.")
+        return horoscope_cache[cache_key]
+
     try:
         # 1. Парсинг оригинала
         original_text_en = fetch_horoscope_from_site(sign, day)
@@ -125,6 +143,10 @@ def generate_horoscope(sign: str, day: str = "today", detailed: bool = False) ->
         except Exception as e:
             logger.warning(f"GPT недоступен. Используем перевод. {e}")
             final_text = f"{intro}\n\n{translated_text.strip()}"
+
+        # Кэшируем результат
+        horoscope_cache[cache_key] = final_text
+        logger.info(f"Гороскоп для {sign} ({day}, detailed={detailed}) сгенерирован и закеширован.")
 
         return final_text
 
