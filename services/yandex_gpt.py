@@ -1,8 +1,10 @@
-# services/yandex_gpt.py
-
 import os
 import requests
+import logging
 from dotenv import load_dotenv
+
+# Настройка логирования
+logger = logging.getLogger(__name__)
 
 # Загружаем переменные окружения
 load_dotenv()
@@ -10,22 +12,59 @@ load_dotenv()
 # Получаем ключи API
 YANDEX_GPT_API_KEY = os.getenv("YANDEX_GPT_API_KEY")
 YANDEX_FOLDER_ID = os.getenv("YANDEX_FOLDER_ID")
+YANDEX_OAUTH_TOKEN = os.getenv("YANDEX_OAUTH_TOKEN")  # Для fallback на IAM-токен
 
-def generate_text_yandex(prompt: str, temperature: float = 0.6, max_tokens: int = 2000) -> str:
+def get_iam_token() -> str:
+    """Получаем IAM-токен по OAuth-токену (действует ~1 час)"""
+    if not YANDEX_OAUTH_TOKEN:
+        raise ValueError("Отсутствует YANDEX_OAUTH_TOKEN в .env для IAM fallback.")
+    url = "https://iam.api.cloud.yandex.net/iam/v1/tokens"
+    payload = {"yandexPassportOauthToken": YANDEX_OAUTH_TOKEN}
+    try:
+        response = requests.post(url, json=payload, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        return data["iamToken"]
+    except Exception as e:
+        logger.error(f"Ошибка получения IAM-токена: {e}")
+        raise
+
+def generate_text_yandex(prompt: str, temperature: float = 0.6, max_tokens: int = 2000, use_iam: bool = False) -> str:
     """
     Генерирует текст используя YandexGPT API
     :param prompt: Текст запроса
     :param temperature: Температура генерации (0.0 - 1.0)
     :param max_tokens: Максимальное количество токенов
-    :return: Сгенерированный текст
+    :param use_iam: Если True, используем IAM-токен вместо Api-Key
+    :return: Сгенерированный текст или fallback
     """
+    if not YANDEX_FOLDER_ID:
+        logger.error("Отсутствует YANDEX_FOLDER_ID в .env.")
+        return prompt  # Fallback: возвращаем оригинальный prompt
+
+    if use_iam:
+        try:
+            iam_token = get_iam_token()
+            headers = {
+                "Authorization": f"Bearer {iam_token}",
+                "x-folder-id": YANDEX_FOLDER_ID
+            }
+        except Exception as e:
+            logger.error(f"IAM fallback провалился: {e}")
+            return prompt
+    else:
+        if not YANDEX_GPT_API_KEY:
+            logger.warning("Отсутствует YANDEX_GPT_API_KEY. Пробуем IAM fallback.")
+            return generate_text_yandex(prompt, temperature, max_tokens, use_iam=True)
+        headers = {
+            "Authorization": f"Api-Key {YANDEX_GPT_API_KEY}",
+            "x-folder-id": YANDEX_FOLDER_ID
+        }
+
     try:
         response = requests.post(
             "https://llm.api.cloud.yandex.net/foundationModels/v1/completion",
-            headers={
-                "Authorization": f"Api-Key {YANDEX_GPT_API_KEY}",
-                "x-folder-id": YANDEX_FOLDER_ID
-            },
+            headers=headers,
             json={
                 "modelUri": f"gpt://{YANDEX_FOLDER_ID}/yandexgpt-lite",
                 "completionOptions": {
@@ -34,69 +73,100 @@ def generate_text_yandex(prompt: str, temperature: float = 0.6, max_tokens: int 
                     "maxTokens": str(max_tokens)
                 },
                 "messages": [
-                    {
-                        "role": "user",
-                        "text": prompt
-                    }
+                    {"role": "user", "text": prompt}
                 ]
-            }
+            },
+            timeout=30  # Увеличенный таймаут для GPT
         )
         
         if response.status_code == 200:
             result = response.json()
             return result["result"]["alternatives"][0]["message"]["text"]
         else:
-            print(f"Ошибка API: {response.status_code}")
-            print(f"Ответ: {response.text}")
-            return "Извините, произошла ошибка при генерации текста."
+            logger.warning(f"Ошибка API: {response.status_code}. Ответ: {response.text}")
+            if response.status_code == 401 and not use_iam:
+                logger.info("Пробуем IAM fallback для 401.")
+                return generate_text_yandex(prompt, temperature, max_tokens, use_iam=True)
+            elif response.status_code == 402:
+                logger.error("Ошибка 402: Payment Required. Активируйте биллинг в Yandex Cloud.")
+            elif response.status_code == 429:
+                logger.error("Ошибка 429: Too Many Requests. Превышен лимит.")
+            return prompt  # Fallback: оригинальный prompt
             
     except Exception as e:
-        print(f"Ошибка при запросе к YandexGPT: {e}")
-        return "Извините, произошла ошибка при обращении к сервису."
+        logger.error(f"Ошибка при запросе к YandexGPT: {e}")
+        if not use_iam:
+            return generate_text_yandex(prompt, temperature, max_tokens, use_iam=True)
+        return prompt  # Финальный fallback
 
-def generate_text_with_system(system_prompt: str, user_prompt: str, temperature: float = 0.6) -> str:
+def generate_text_with_system(system_prompt: str, user_prompt: str, temperature: float = 0.6, max_tokens: int = 2000, use_iam: bool = False) -> str:
     """
     Генерирует текст с учетом системного промпта
     :param system_prompt: Системный промпт для установки роли
     :param user_prompt: Пользовательский запрос
     :param temperature: Температура генерации
-    :return: Сгенерированный текст
+    :param max_tokens: Максимальное количество токенов
+    :param use_iam: Если True, используем IAM-токен вместо Api-Key
+    :return: Сгенерированный текст или fallback
     """
+    if not YANDEX_FOLDER_ID:
+        logger.error("Отсутствует YANDEX_FOLDER_ID в .env.")
+        return user_prompt  # Fallback
+
+    if use_iam:
+        try:
+            iam_token = get_iam_token()
+            headers = {
+                "Authorization": f"Bearer {iam_token}",
+                "x-folder-id": YANDEX_FOLDER_ID
+            }
+        except Exception as e:
+            logger.error(f"IAM fallback провалился: {e}")
+            return user_prompt
+    else:
+        if not YANDEX_GPT_API_KEY:
+            logger.warning("Отсутствует YANDEX_GPT_API_KEY. Пробуем IAM fallback.")
+            return generate_text_with_system(system_prompt, user_prompt, temperature, max_tokens, use_iam=True)
+        headers = {
+            "Authorization": f"Api-Key {YANDEX_GPT_API_KEY}",
+            "x-folder-id": YANDEX_FOLDER_ID
+        }
+
     try:
         response = requests.post(
             "https://llm.api.cloud.yandex.net/foundationModels/v1/completion",
-            headers={
-                "Authorization": f"Api-Key {YANDEX_GPT_API_KEY}",
-                "x-folder-id": YANDEX_FOLDER_ID
-            },
+            headers=headers,
             json={
                 "modelUri": f"gpt://{YANDEX_FOLDER_ID}/yandexgpt-lite",
                 "completionOptions": {
                     "stream": False,
                     "temperature": temperature,
-                    "maxTokens": "2000"
+                    "maxTokens": str(max_tokens)
                 },
                 "messages": [
-                    {
-                        "role": "system",
-                        "text": system_prompt
-                    },
-                    {
-                        "role": "user",
-                        "text": user_prompt
-                    }
+                    {"role": "system", "text": system_prompt},
+                    {"role": "user", "text": user_prompt}
                 ]
-            }
+            },
+            timeout=30
         )
         
         if response.status_code == 200:
             result = response.json()
             return result["result"]["alternatives"][0]["message"]["text"]
         else:
-            print(f"Ошибка API: {response.status_code}")
-            print(f"Ответ: {response.text}")
-            return "Извините, произошла ошибка при генерации текста."
+            logger.warning(f"Ошибка API: {response.status_code}. Ответ: {response.text}")
+            if response.status_code == 401 and not use_iam:
+                logger.info("Пробуем IAM fallback для 401.")
+                return generate_text_with_system(system_prompt, user_prompt, temperature, max_tokens, use_iam=True)
+            elif response.status_code == 402:
+                logger.error("Ошибка 402: Payment Required. Активируйте биллинг.")
+            elif response.status_code == 429:
+                logger.error("Ошибка 429: Too Many Requests. Превышен лимит.")
+            return user_prompt  # Fallback: оригинальный user_prompt
             
     except Exception as e:
-        print(f"Ошибка при запросе к YandexGPT: {e}")
-        return "Извините, произошла ошибка при обращении к сервису."
+        logger.error(f"Ошибка при запросе к YandexGPT: {e}")
+        if not use_iam:
+            return generate_text_with_system(system_prompt, user_prompt, temperature, max_tokens, use_iam=True)
+        return user_prompt  # Финальный fallback
