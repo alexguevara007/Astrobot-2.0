@@ -10,7 +10,7 @@ from keyboards import (
 )
 from services.lunar import get_lunar_text
 from services.user_tracker import track_user, get_user_language, toggle_user_language
-from locales import get_text
+from services.locales import get_text
 
 # Импорты обработчиков
 from handlers.horoscope import horoscope_today, horoscope_tomorrow, handle_zodiac_callback
