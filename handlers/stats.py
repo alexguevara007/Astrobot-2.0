@@ -3,7 +3,7 @@
 from telegram import Update
 from telegram.ext import ContextTypes
 from services.user_tracker import get_user_stats_by_day, get_user_count
-from locales import get_text
+from services.locales import get_text
 
 ADMIN_IDS = [306285013]  
 
