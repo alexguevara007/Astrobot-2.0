@@ -1,13 +1,13 @@
 import os
-import time
 import logging
 import asyncio
 import aiohttp
 import psutil
+import random  # Добавлено для случайной задержки
 from datetime import datetime
 from aiohttp import web
 from dotenv import load_dotenv
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup  # Добавлены импорты для клавиатур
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler,
     MessageHandler, ContextTypes, Defaults, filters
@@ -37,7 +37,7 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 PORT = int(os.getenv("PORT", 8080))
 RENDER_URL = "https://astrobot-2-0.onrender.com"
-KEEP_ALIVE_INTERVAL = 840
+KEEP_ALIVE_INTERVAL = 840  # Базовый интервал
 
 START_TIME = datetime.now()
 application = None
@@ -70,7 +70,7 @@ async def keep_alive():
                     logger.info(f"✅ Keep-alive статус: {resp.status} @ {datetime.now()}")
             except Exception as e:
                 logger.warning(f"⚠️ Ошибка ping: {e}")
-            await asyncio.sleep(KEEP_ALIVE_INTERVAL)
+            await asyncio.sleep(KEEP_ALIVE_INTERVAL + random.randint(0, 60))  # Случайная задержка
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.error("❌ Ошибка: %s", context.error, exc_info=True)
@@ -126,6 +126,8 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_lang not in LANGUAGES:
         user_lang = 'ru'
     context.user_data['lang'] = user_lang
+    
+    await track_user(update.effective_user)  # Пример интеграции трекинга
     
     text = get_text('welcome', user_lang)
     await update.message.reply_text(text)
@@ -202,26 +204,31 @@ async def setup_bot():
         webhook_path = f"/webhook/{BOT_TOKEN}"
         webhook_url = f"{RENDER_URL}{webhook_path}"
         await application.bot.delete_webhook()
-        await application.bot.set_webhook(webhook_url)
-
-        logger.info(f"🌐 Webhook установлен: {webhook_url}")
+        success = await application.bot.set_webhook(webhook_url)
+        if success:
+            logger.info(f"🌐 Webhook установлен: {webhook_url}")
+        else:
+            logger.error("❌ Не удалось установить webhook")
 
     except Exception as e:
         logger.error(f"Ошибка при старте бота: {e}", exc_info=True)
         raise
 
-async def main():
-    await setup_bot()
+def main():  # Сделали синхронной
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(setup_bot())  # Запускаем асинхронную настройку
 
     app = web.Application()
     app.router.add_get("/", health_check)
     app.router.add_post(f"/webhook/{BOT_TOKEN}", webhook_handler)
 
-    asyncio.create_task(keep_alive())
+    loop.create_task(keep_alive())  # Запускаем keep_alive как задачу
+
     return app
 
 if __name__ == "__main__":
     try:
-        web.run_app(main(), port=PORT)
+        app = main()  # Получаем app синхронно
+        web.run_app(app, port=PORT)  # Запускаем сервер
     except Exception as e:
         logger.critical(f"❌ Ошибка запуска: {e}", exc_info=True)
