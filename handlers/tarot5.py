@@ -4,7 +4,7 @@ import json
 import random
 from keyboards import get_back_to_menu_inline
 from services.database import save_prediction
-from locales import get_text
+from services.locales import get_text
 from services.yandex_translate import translate
 
 # Загрузка колоды
