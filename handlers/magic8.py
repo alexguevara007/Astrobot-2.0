@@ -13,7 +13,7 @@ from telegram.constants import ChatAction
 from telegram.ext import ContextTypes
 
 from keyboards import get_main_menu_keyboard
-from locales import get_text
+from services.locales import get_text
 
 logger = logging.getLogger(__name__)
 
