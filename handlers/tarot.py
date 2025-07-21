@@ -4,7 +4,7 @@ from telegram import Update, InputMediaPhoto
 from telegram.ext import ContextTypes
 from services.database import save_prediction
 from keyboards import get_back_to_menu_inline
-from locales import get_text
+from services.locales import get_text
 from services.yandex_translate import translate
 
 # Загрузка данных карт
