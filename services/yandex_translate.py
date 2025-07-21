@@ -79,3 +79,4 @@ async def translate_text(text: str, target_lang="ru", source_lang="en", use_iam=
     except Exception as e:
         logger.error(f"Ошибка перевода: {e}")
         return text
+translate = translate_text
