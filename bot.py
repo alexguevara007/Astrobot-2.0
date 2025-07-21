@@ -28,7 +28,7 @@ from scheduler import setup_scheduler
 
 from services.user_tracker import track_user
 
-from locales import get_text, LANGUAGES
+from services.locales import get_text, LANGUAGES
 
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
