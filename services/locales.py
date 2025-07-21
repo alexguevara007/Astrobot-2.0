@@ -1,4 +1,4 @@
-# services/locales.py
+import logging
 
 LANGUAGES = {
     'ru': 'Русский',
@@ -31,6 +31,8 @@ TRANSLATIONS = {
 
         # Гороскоп
         'zodiac_select': '🔮 Выберите знак зодиака:',
+        'zodiac_select_tomorrow': '🔮 Завтрашний гороскоп: выберите знак зодиака',
+        'invalid_sign': '⚠️ Неверно указан знак зодиака. Пожалуйста, выберите знак из предложенного списка.',
         'horoscope_loading': '{emoji} Генерация гороскопа для {sign}\nСтихия: {element}\nУправитель: {planet}\n\n⏳ Пожалуйста, подождите...',
         'horoscope_header': '{emoji} <b>{sign}</b>\nСтихия: {element}\nПланета: {planet}\n<b>{detailed_type} гороскоп на {day_text} ({date})</b>\n──────────────────────────────\n\n',
         'horoscope_error': '⚠️ Ошибка при генерации гороскопа. Попробуйте позже.',
@@ -104,6 +106,8 @@ TRANSLATIONS = {
 
         # Horoscope
         'zodiac_select': '🔮 Choose zodiac sign:',
+        'zodiac_select_tomorrow': '🔮 Tomorrow\'s horoscope: choose your sign',
+        'invalid_sign': '⚠️ Invalid zodiac sign. Please choose one from the suggested list.',
         'horoscope_loading': '{emoji} Generating horoscope for {sign}\nElement: {element}\nRuler: {planet}\n\n⏳ Please wait...',
         'horoscope_header': '{emoji} <b>{sign}</b>\nElement: {element}\nPlanet: {planet}\n<b>{detailed_type} horoscope for {day_text} ({date})</b>\n──────────────────────────────\n\n',
         'horoscope_error': '⚠️ Error generating horoscope. Try later.',
@@ -160,5 +164,7 @@ def get_text(key: str, lang: str = 'ru', **kwargs) -> str:
     Фолбэк: ru -> [Missing: key]
     """
     translations = TRANSLATIONS.get(lang, TRANSLATIONS['ru'])
+    if key not in translations:
+        logging.warning(f"[MISSING TRANSLATION] key='{key}', lang='{lang}'")
     text = translations.get(key, f"[Missing: {key}]")
     return text.format(**kwargs) if kwargs else text
