@@ -5,7 +5,7 @@ import os
 import copy
 
 from keyboards import get_back_to_menu_inline
-from locales import get_text
+from services.locales import get_text
 
 # Загрузка данных совместимости из JSON
 with open("data/compatibility.json", encoding="utf-8") as f:
