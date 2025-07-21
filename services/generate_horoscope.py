@@ -65,14 +65,17 @@ def generate_horoscope(sign: str, day: str = "today", detailed: bool = False, la
             translated_text = translate_text(original_text_en, target_lang=lang)
 
         target_date = date.today() if day == "today" else date.today() + timedelta(days=1)
-        lunar_info = get_lunar_info(target_date)
-        energy = get_day_energy_description()
+        lunar_info = get_lunar_info(target_date, lang=lang)
+        energy = get_day_energy_description(lang=lang)
 
         moon_context = get_text('moon_context', lang, sign=lunar_info['moon_sign'], phase=lunar_info['phase_text'], percent=lunar_info['moon_phase'])
         energy_context = get_text('energy_context', lang, energy=energy or get_text('energy_undefined', lang))
 
-        tone = random.choice(get_text('rephrase_tones', lang))  # Добавьте список в locales.py
-        intro = random.choice(get_text('start_intros', lang))  # Добавьте список в locales.py
+        tones = get_text('rephrase_tones', lang).split(';')
+        tone = random.choice(tones).strip()
+
+        intros = get_text('start_intros', lang).split(';')
+        intro = random.choice(intros).strip()
 
         system_prompt = get_text('system_prompt', lang)
 
