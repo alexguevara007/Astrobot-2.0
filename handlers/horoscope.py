@@ -7,7 +7,7 @@ from datetime import datetime
 
 from services.generate_horoscope import generate_horoscope
 from keyboards import get_zodiac_inline_keyboard, get_back_to_menu_inline
-from locales import get_text
+from services.locales import get_text
 
 logger = logging.getLogger(__name__)
 
