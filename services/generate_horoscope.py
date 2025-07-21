@@ -9,7 +9,7 @@ from services.yandex_translate import translate_text
 from services.yandex_gpt import generate_text_with_system
 from services.astro_data import get_lunar_info
 from services.astroseek_scraper import get_day_energy_description
-from locales import get_text
+from services.locales import get_text
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
