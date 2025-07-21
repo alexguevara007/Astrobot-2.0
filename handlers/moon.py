@@ -2,7 +2,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from services.lunar import get_lunar_text
 from keyboards import get_back_to_menu_inline
-from locales import get_text
+from services.locales import get_text
 
 async def moon(update: Update, context: ContextTypes.DEFAULT_TYPE, lang: str = 'ru'):
     try:
