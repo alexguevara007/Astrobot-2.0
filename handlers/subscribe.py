@@ -6,7 +6,7 @@ from services.database import (
     is_subscribed
 )
 from keyboards import get_zodiac_subscribe_keyboard
-from locales import get_text
+from services.locales import get_text
 
 ZODIAC_KEYS = [
     "aries", "taurus", "gemini",
