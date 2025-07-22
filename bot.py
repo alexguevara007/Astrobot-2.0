@@ -16,7 +16,7 @@ from telegram.ext import (
 from telegram.constants import ParseMode
 
 # ─────── Импорты из приложения ───────
-from handlers.menu import start, button_handler, reply_command_handler
+from handlers.menu import start as menu_start, button_handler, reply_command_handler
 from handlers.horoscope import horoscope_today, horoscope_tomorrow
 from handlers.subscribe import subscribe, unsubscribe, subscription_status
 from handlers.moon import moon
@@ -29,7 +29,6 @@ from services.database import init_db
 from scheduler import setup_scheduler
 from services.user_tracker import track_user
 from services.locales import get_text, LANGUAGES
-
 
 # ─────── Логирование ───────
 logging.basicConfig(level=logging.INFO)
@@ -66,10 +65,11 @@ async def keep_alive():
                 logger.warning(f"⚠️ Keep-alive error: {e}")
             await asyncio.sleep(KEEP_ALIVE_INTERVAL + random.randint(0, 30))
 
-# ─────── Web-хендлеры ───────
+# ─────── Webhook-хендлер ───────
 async def webhook_handler(request: web.Request):
     try:
         data = await request.json()
+        logger.info(f"[WEBHOOK] 🔔 Обновление получено: {data}")
         bot_app = request.app["application"]
         update = Update.de_json(data, bot_app.bot)
         await bot_app.process_update(update)
@@ -78,6 +78,7 @@ async def webhook_handler(request: web.Request):
         logger.exception("❌ Webhook обработка не удалась")
         return web.Response(status=500)
 
+# ─────── Health Check ───────
 async def health_check(request: web.Request):
     try:
         bot_app = request.app["application"]
@@ -109,13 +110,14 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             logger.exception("Не удалось отправить сообщение об ошибке.")
 
-# ─────── Обработка команды /start ───────
+# ─────── Обработка /start ───────
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    lang_code = update.effective_user.language_code or 'ru'
+    user = update.effective_user
+    lang_code = user.language_code or 'ru'
     lang = lang_code if lang_code in LANGUAGES else 'ru'
     context.user_data['lang'] = lang
 
-    track_user(update.effective_user.id, update.effective_user.username)
+    track_user(user.id, user.username or "")
     await update.message.reply_text(get_text("welcome", lang))
 
 # ─────── Обработка выбора языка ───────
@@ -145,17 +147,16 @@ async def main():
         .build()
     )
 
-    # Внедряем PTB в веб-сервер
     app["application"] = application
 
     # AIOHTTP маршруты
     app.router.add_post(f"/webhook/{BOT_TOKEN}", webhook_handler)
     app.router.add_get("/", health_check)
 
-    # Регистрация хендлеров Telegram
+    # Telegram хендлеры
     application.add_handler(CommandHandler("start", start_handler))
-    application.add_handler(CommandHandler("menu", start))
-    application.add_handler(CommandHandler("help", start))
+    application.add_handler(CommandHandler("menu", menu_start))
+    application.add_handler(CommandHandler("help", menu_start))
     application.add_handler(CommandHandler("language", language_handler))
     application.add_handler(CommandHandler("subscribe", subscribe))
     application.add_handler(CommandHandler("unsubscribe", unsubscribe))
@@ -186,13 +187,12 @@ async def main():
     setup_scheduler(application)
     asyncio.create_task(keep_alive())
 
-    # Запускаем Web-сервер
+    # Запускаем web-сервер
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", PORT)
     await site.start()
 
-    # Бесконечное ожидание
     await asyncio.Event().wait()
 
 # ─────── Точка входа ───────
