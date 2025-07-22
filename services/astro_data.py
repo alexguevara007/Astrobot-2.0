@@ -1,8 +1,13 @@
 import ephem
 from datetime import date
-import pytz
 
 def get_lunar_info(target_date=None, lang: str = 'ru'):
+    """
+    Возвращает фазу Луны (%), имя фазы и знак зодиака, в котором находится Луна.
+    :param target_date: объект date, если None — берём текущую дату
+    :param lang: 'ru' или 'en'
+    :return: dict с полями: moon_phase, moon_sign, phase_text
+    """
     if target_date is None:
         target_date = date.today()
 
@@ -13,6 +18,7 @@ def get_lunar_info(target_date=None, lang: str = 'ru'):
     phase = moon.phase
     phase_pct = round(phase, 1)
 
+    # Карта фаз
     phases = {
         'ru': {
             'new': "Новолуние",
@@ -28,16 +34,7 @@ def get_lunar_info(target_date=None, lang: str = 'ru'):
         }
     }
 
-    if phase < 1:
-        phase_text = phases[lang]['new']
-    elif phase > 99:
-        phase_text = phases[lang]['full']
-    elif phase < 50:
-        phase_text = phases[lang]['waxing']
-    else:
-        phase_text = phases[lang]['waning']
-
-    sign_eng = ephem.constellation(moon)[1]
+    # Карта знаков зодиака
     signs = {
         'ru': {
             'Aries': '♈️ Овен', 'Taurus': '♉️ Телец', 'Gemini': '♊️ Близнецы', 'Cancer': '♋️ Рак',
@@ -51,8 +48,24 @@ def get_lunar_info(target_date=None, lang: str = 'ru'):
         }
     }
 
+    # Безопасный доступ по языку
+    phase_map = phases.get(lang, phases['ru'])
+    sign_map = signs.get(lang, signs['ru'])
+
+    if phase < 1:
+        phase_text = phase_map['new']
+    elif phase > 99:
+        phase_text = phase_map['full']
+    elif phase < 50:
+        phase_text = phase_map['waxing']
+    else:
+        phase_text = phase_map['waning']
+
+    sign_eng = ephem.constellation(moon)[1]
+    moon_sign = sign_map.get(sign_eng, sign_eng)
+
     return {
         "moon_phase": phase_pct,
-        "moon_sign": signs.get(lang, signs['ru']).get(sign_eng, sign_eng),
+        "moon_sign": moon_sign,
         "phase_text": phase_text
     }
