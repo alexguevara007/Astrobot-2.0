@@ -4,6 +4,7 @@ import asyncio
 import aiohttp
 import random
 import psutil
+import signal  # Для graceful shutdown
 from datetime import datetime
 from aiohttp import web
 from dotenv import load_dotenv
@@ -30,16 +31,22 @@ from scheduler import setup_scheduler
 from services.user_tracker import track_user
 from services.locales import get_text, LANGUAGES
 
-# ─────── Логирование ───────
-logging.basicConfig(level=logging.INFO)
+# ─────── Логирование (улучшено) ───────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler()]  # Можно добавить FileHandler для файлов
+)
 logger = logging.getLogger(__name__)
 
 # ─────── Переменные окружения ───────
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+if not BOT_TOKEN:
+    raise ValueError("BOT_TOKEN не найден в .env!")
 PORT = int(os.getenv("PORT", 8080))
 RENDER_URL = os.getenv("RENDER_URL", "https://astrobot.onrender.com")
-KEEP_ALIVE_INTERVAL = 840
+KEEP_ALIVE_INTERVAL = int(os.getenv("KEEP_ALIVE_INTERVAL", 840))  # Configurable
 START_TIME = datetime.now()
 
 # ─────── Вспомогательные функции ───────
@@ -78,7 +85,7 @@ async def webhook_handler(request: web.Request):
         logger.exception("❌ Webhook обработка не удалась")
         return web.Response(status=500)
 
-# ─────── Health Check ───────
+# ─────── Health Check (с try-except) ───────
 async def health_check(request: web.Request):
     try:
         bot_app = request.app["application"]
@@ -117,7 +124,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lang = lang_code if lang_code in LANGUAGES else 'ru'
     context.user_data['lang'] = lang
 
-    track_user(user.id, user.username or "")
+    track_user(user.id, user.username or "")  # TODO: Сделать async, если пишет в БД
     await update.message.reply_text(get_text("welcome", lang))
 
 # ─────── Обработка выбора языка ───────
@@ -153,7 +160,7 @@ async def main():
     app.router.add_post(f"/webhook/{BOT_TOKEN}", webhook_handler)
     app.router.add_get("/", health_check)
 
-    # Telegram хендлеры
+    # Telegram хендлеры (без изменений)
     application.add_handler(CommandHandler("start", start_handler))
     application.add_handler(CommandHandler("menu", menu_start))
     application.add_handler(CommandHandler("help", menu_start))
@@ -178,7 +185,7 @@ async def main():
     await application.initialize()
     await application.bot.delete_webhook()
     webhook_url = f"{RENDER_URL}/webhook/{BOT_TOKEN}"
-    await application.bot.set_webhook(webhook_url)
+    await application.bot.set_webhook(webhook_url)  # TODO: Добавить проверку успеха
     await application.start()
 
     logger.info(f"🤖 Бот запущен по webhook: {webhook_url}")
@@ -193,7 +200,24 @@ async def main():
     site = web.TCPSite(runner, "0.0.0.0", PORT)
     await site.start()
 
-    await asyncio.Event().wait()
+    # Graceful shutdown (на SIGTERM/SIGINT)
+    loop = asyncio.get_running_loop()
+    stop_event = asyncio.Event()
+
+    def shutdown_handler(signum):
+        logger.info(f"📴 Получен сигнал {signum}. Остановка...")
+        stop_event.set()
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, shutdown_handler, sig)
+
+    await stop_event.wait()
+
+    # Cleanup
+    await application.stop()
+    await application.shutdown()
+    await runner.cleanup()
+    logger.info("🛑 Бот остановлен gracefully.")
 
 # ─────── Точка входа ───────
 if __name__ == "__main__":
