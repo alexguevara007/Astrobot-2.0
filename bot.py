@@ -15,7 +15,7 @@ from telegram.ext import (
 )
 from telegram.constants import ParseMode
 
-# Импорты из приложения
+# ─────── Импорты из приложения ───────
 from handlers.menu import start, button_handler, reply_command_handler
 from handlers.horoscope import horoscope_today, horoscope_tomorrow
 from handlers.subscribe import subscribe, unsubscribe, subscription_status
@@ -30,19 +30,20 @@ from scheduler import setup_scheduler
 from services.user_tracker import track_user
 from services.locales import get_text, LANGUAGES
 
-# ─────────────── Логирование ───────────────
+
+# ─────── Логирование ───────
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ─────────────── Переменные окружения ───────────────
+# ─────── Переменные окружения ───────
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 PORT = int(os.getenv("PORT", 8080))
 RENDER_URL = os.getenv("RENDER_URL", "https://astrobot.onrender.com")
-KEEP_ALIVE_INTERVAL = 840  # ~14 минут
+KEEP_ALIVE_INTERVAL = 840
 START_TIME = datetime.now()
 
-# ─────────────── Вспомогательное ───────────────
+# ─────── Вспомогательные функции ───────
 def get_uptime():
     uptime = datetime.now() - START_TIME
     return f"{uptime.days}d {uptime.seconds // 3600}h {(uptime.seconds % 3600) // 60}m"
@@ -65,7 +66,7 @@ async def keep_alive():
                 logger.warning(f"⚠️ Keep-alive error: {e}")
             await asyncio.sleep(KEEP_ALIVE_INTERVAL + random.randint(0, 30))
 
-# ─────────────── Web-хендлеры ───────────────
+# ─────── Web-хендлеры ───────
 async def webhook_handler(request: web.Request):
     try:
         data = await request.json()
@@ -99,13 +100,16 @@ async def health_check(request: web.Request):
         logger.exception("❌ Ошибка health_check")
         return web.json_response({"status": "error", "message": str(e)}, status=500)
 
-# ─────────────── Обработки ошибок Telegram ───────────────
+# ─────── Обработка ошибок Telegram ───────
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.error("❌ Telegram error: %s", context.error, exc_info=True)
     if update and update.effective_message:
-        await update.effective_message.reply_text("⚠️ Ошибка. Попробуйте позже.")
+        try:
+            await update.effective_message.reply_text("⚠️ Ошибка. Попробуйте позже.")
+        except Exception:
+            logger.exception("Не удалось отправить сообщение об ошибке.")
 
-# ─────────────── Обработка команды /start ───────────────
+# ─────── Обработка команды /start ───────
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lang_code = update.effective_user.language_code or 'ru'
     lang = lang_code if lang_code in LANGUAGES else 'ru'
@@ -114,7 +118,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     track_user(update.effective_user.id, update.effective_user.username)
     await update.message.reply_text(get_text("welcome", lang))
 
-# ─────────────── Обработка смены языка ───────────────
+# ─────── Обработка выбора языка ───────
 async def language_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton(name, callback_data=f"lang_{code}")]
                 for code, name in LANGUAGES.items()]
@@ -128,7 +132,7 @@ async def language_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['lang'] = lang
     await query.edit_message_text(get_text('language_set', lang, lang=LANGUAGES[lang]))
 
-# ─────────────── Основной запуск ───────────────
+# ─────── Основной запуск ───────
 async def main():
     init_db()
     app = web.Application()
@@ -141,14 +145,14 @@ async def main():
         .build()
     )
 
-    # Внедряем PTB в web server
+    # Внедряем PTB в веб-сервер
     app["application"] = application
 
     # AIOHTTP маршруты
     app.router.add_post(f"/webhook/{BOT_TOKEN}", webhook_handler)
     app.router.add_get("/", health_check)
 
-    # Telegram handlers
+    # Регистрация хендлеров Telegram
     application.add_handler(CommandHandler("start", start_handler))
     application.add_handler(CommandHandler("menu", start))
     application.add_handler(CommandHandler("help", start))
@@ -188,11 +192,10 @@ async def main():
     site = web.TCPSite(runner, "0.0.0.0", PORT)
     await site.start()
 
-    # Удержание процесса работоспособным
+    # Бесконечное ожидание
     await asyncio.Event().wait()
 
-
-# ─────────────── Точка входа ───────────────
+# ─────── Точка входа ───────
 if __name__ == "__main__":
     try:
         asyncio.run(main())
