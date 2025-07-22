@@ -39,9 +39,16 @@ TRANSLATIONS = {
         'horoscope_error': '⚠️ Ошибка при генерации гороскопа. Попробуйте позже.',
         'detailed_type_detailed': 'Подробный',
         'detailed_type_short': 'Краткий',
+        'day_today': 'Сегодня',
+        'day_tomorrow': 'Завтра',
+        'detailed_button': 'Подробнее 🔎',
+        'another_sign': '♻️ Другой знак',
+        'choose_action': 'Выберите действие:',
+        'invalid_data': '⚠️ Неверные данные запроса',
+        'invalid_format': '⚠️ Неправильный формат команды',
 
         # AI
-        'system_prompt': 'Ты создаешь персональные гороскопы... (коротко здесь)',
+        'system_prompt': 'Ты создаешь персональные гороскопы...',
         'user_prompt_template': 'Вот перевод гороскопа:\n\n\"\"\"{translated}\"\"\"\n\nПерепиши его...',
 
         # Таро
@@ -71,6 +78,8 @@ TRANSLATIONS = {
         'compatibility_select': 'Выберите знаки для совместимости:',
         'compatibility_result': 'Совместимость {sign1} и {sign2}:\n{percentage}% - {description}',
         'compatibility_error': '⚠️ Ошибка при расчёте совместимости.',
+        'compatibility_second_select': '✨ Теперь выберите второй знак для сравнения с {sign}:',
+        'compatibility_error_first': '⚠️ Сначала выберите первый знак.',
 
         # Подписка
         'subscribe': '🔔 Подписка',
@@ -82,9 +91,12 @@ TRANSLATIONS = {
 
         # Магический шар
         'magic_ball': '🧿 Магический шар',
-        'magic8_ask': 'Задайте вопрос шару...',
-        'magic8_answer': 'Шар говорит: {answer}',
-        'magic8_error': '⚠️ Шар не отвечает.',
+        'magic8_ask': '🔮 Задайте вопрос шару. Он всё знает!',
+        'magic8_button': '🔍 Спросить шар',
+        'magic8_loading': '🧘 Шар думает...',
+        'magic8_answer': '🎱 Шар говорит: <b>{answer}</b>',
+        'magic8_repeat': '🔁 Спросить снова',
+        'magic8_error': '⚠️ Шар молчит. Повторите позже.',
 
         # Статистика
         'new_users': 'Новые пользователи: {count} за {period}',
@@ -92,11 +104,12 @@ TRANSLATIONS = {
 
         # Рассылка
         'daily_horoscope': 'Ваш гороскоп на {date}:\n{text}',
-        'scheduler_error': '⚠️ Ошибка в рассылке.'
+        'scheduler_error': '⚠️ Ошибка в рассылке.',
+        'generation_error': '⚠️ Ошибка генерации гороскопа.'
     },
 
     'en': {
-        # General
+        # Общие
         'welcome': 'Welcome! I am your astrologer. Choose language: /language',
         'language_set': 'Language changed to {lang}!',
         'language_button': '🌐 Русский 🇷🇺',
@@ -128,11 +141,17 @@ TRANSLATIONS = {
         'horoscope_error': '⚠️ Error generating horoscope. Try later.',
         'detailed_type_detailed': 'Detailed',
         'detailed_type_short': 'Short',
+        'day_today': 'Today',
+        'day_tomorrow': 'Tomorrow',
+        'detailed_button': '🔎 More details',
+        'another_sign': '♻️ Choose another sign',
+        'choose_action': 'Choose an action:',
+        'invalid_data': '⚠️ Invalid data received',
+        'invalid_format': '⚠️ Invalid horoscope command format',
 
         # AI
         'system_prompt': 'You create personal horoscopes in English...',
         'user_prompt_template': 'Here is the horoscope translation:\n\n\"\"\"{translated}\"\"\"\n\nRewrite...',
-
 
         # Tarot
         'tarot_one': '🃏 Daily Tarot Card',
@@ -161,6 +180,8 @@ TRANSLATIONS = {
         'compatibility_select': 'Choose signs for compatibility:',
         'compatibility_result': 'Compatibility between {sign1} and {sign2}:\n{percentage}% - {description}',
         'compatibility_error': '⚠️ Error calculating compatibility.',
+        'compatibility_second_select': '✨ Now choose the second sign to compare with {sign}:',
+        'compatibility_error_first': '⚠️ Please select the first sign first.',
 
         # Subscription
         'subscribe': '🔔 Subscription',
@@ -172,9 +193,12 @@ TRANSLATIONS = {
 
         # Magic 8-ball
         'magic_ball': '🧿 Magic 8-Ball',
-        'magic8_ask': 'Ask the magic ball a question...',
-        'magic8_answer': 'The ball says: {answer}',
-        'magic8_error': '⚠️ The ball is silent.',
+        'magic8_ask': '🔮 Ask the magic ball a question. It knows everything!',
+        'magic8_button': '🔍 Ask the Ball',
+        'magic8_loading': '🧘 The ball is thinking...',
+        'magic8_answer': '🎱 The ball says: <b>{answer}</b>',
+        'magic8_repeat': '🔁 Ask again',
+        'magic8_error': '⚠️ The ball is silent. Try again later.',
 
         # Statistics
         'new_users': 'New users: {count} in {period}',
@@ -182,7 +206,8 @@ TRANSLATIONS = {
 
         # Scheduler
         'daily_horoscope': 'Your horoscope for {date}:\n{text}',
-        'scheduler_error': '⚠️ Error in notification.'
+        'scheduler_error': '⚠️ Error in notification.',
+        'generation_error': '⚠️ Horoscope generation error.'
     }
 }
 
