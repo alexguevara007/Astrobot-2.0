@@ -1,9 +1,9 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes
-from telegram.error import BadRequest
 import logging
 import time
 from datetime import datetime
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes
+from telegram.error import BadRequest
 
 from services.generate_horoscope import generate_horoscope
 from keyboards import get_zodiac_inline_keyboard, get_back_to_menu_inline
@@ -11,59 +11,41 @@ from services.locales import get_text
 
 logger = logging.getLogger(__name__)
 
+# Списки знаков и отображаемые имена
 ZODIAC_KEYS = [
-    "aries", "taurus", "gemini",
-    "cancer", "leo", "virgo",
-    "libra", "scorpio", "sagittarius",
-    "capricorn", "aquarius", "pisces"
+    "aries", "taurus", "gemini", "cancer", "leo", "virgo",
+    "libra", "scorpio", "sagittarius", "capricorn", "aquarius", "pisces"
 ]
 
 ZODIAC_DISPLAY = {
     'ru': {
-        "aries": "Овен",
-        "taurus": "Телец",
-        "gemini": "Близнецы",
-        "cancer": "Рак",
-        "leo": "Лев",
-        "virgo": "Дева",
-        "libra": "Весы",
-        "scorpio": "Скорпион",
-        "sagittarius": "Стрелец",
-        "capricorn": "Козерог",
-        "aquarius": "Водолей",
-        "pisces": "Рыбы"
+        "aries": "Овен", "taurus": "Телец", "gemini": "Близнецы", "cancer": "Рак",
+        "leo": "Лев", "virgo": "Дева", "libra": "Весы", "scorpio": "Скорпион",
+        "sagittarius": "Стрелец", "capricorn": "Козерог", "aquarius": "Водолей", "pisces": "Рыбы"
     },
     'en': {
-        "aries": "Aries",
-        "taurus": "Taurus",
-        "gemini": "Gemini",
-        "cancer": "Cancer",
-        "leo": "Leo",
-        "virgo": "Virgo",
-        "libra": "Libra",
-        "scorpio": "Scorpio",
-        "sagittarius": "Sagittarius",
-        "capricorn": "Capricorn",
-        "aquarius": "Aquarius",
-        "pisces": "Pisces"
+        "aries": "Aries", "taurus": "Taurus", "gemini": "Gemini", "cancer": "Cancer",
+        "leo": "Leo", "virgo": "Virgo", "libra": "Libra", "scorpio": "Scorpio",
+        "sagittarius": "Sagittarius", "capricorn": "Capricorn", "aquarius": "Aquarius", "pisces": "Pisces"
     }
 }
 
 ZODIAC_INFO = {
-    "aries":       {"emoji": "♈️", "element_ru": "🔥 Огонь",    "planet_ru": "♂️ Марс",      "element_en": "🔥 Fire",     "planet_en": "♂️ Mars"},
-    "taurus":      {"emoji": "♉️", "element_ru": "🌍 Земля",    "planet_ru": "♀️ Венера",    "element_en": "🌍 Earth",    "planet_en": "♀️ Venus"},
-    "gemini":      {"emoji": "♊️", "element_ru": "💨 Воздух",   "planet_ru": "☿ Меркурий",  "element_en": "💨 Air",      "planet_en": "☿ Mercury"},
-    "cancer":      {"emoji": "♋️", "element_ru": "💧 Вода",     "planet_ru": "🌙 Луна",      "element_en": "💧 Water",    "planet_en": "🌙 Moon"},
-    "leo":         {"emoji": "♌️", "element_ru": "🔥 Огонь",    "planet_ru": "☀️ Солнце",   "element_en": "🔥 Fire",     "planet_en": "☀️ Sun"},
-    "virgo":       {"emoji": "♍️", "element_ru": "🌍 Земля",    "planet_ru": "☿ Меркурий",  "element_en": "🌍 Earth",    "planet_en": "☿ Mercury"},
-    "libra":       {"emoji": "♎️", "element_ru": "💨 Воздух",   "planet_ru": "♀️ Венера",    "element_en": "💨 Air",      "planet_en": "♀️ Venus"},
-    "scorpio":     {"emoji": "♏️", "element_ru": "💧 Вода",     "planet_ru": "♇ Плутон",    "element_en": "💧 Water",    "planet_en": "♇ Pluto"},
-    "sagittarius": {"emoji": "♐️", "element_ru": "🔥 Огонь",    "planet_ru": "♃ Юпитер",    "element_en": "🔥 Fire",     "planet_en": "♃ Jupiter"},
-    "capricorn":   {"emoji": "♑️", "element_ru": "🌍 Земля",    "planet_ru": "♄ Сатурн",    "element_en": "🌍 Earth",    "planet_en": "♄ Saturn"},
-    "aquarius":    {"emoji": "♒️", "element_ru": "💨 Воздух",   "planet_ru": "⛢ Уран",      "element_en": "💨 Air",      "planet_en": "⛢ Uranus"},
-    "pisces":      {"emoji": "♓️", "element_ru": "💧 Вода",     "planet_ru": "♆ Нептун",    "element_en": "💧 Water",    "planet_en": "♆ Neptune"}
+    "aries":       {"emoji": "♈️", "element_ru": "🔥 Огонь", "planet_ru": "♂️ Марс", "element_en": "🔥 Fire", "planet_en": "♂️ Mars"},
+    "taurus":      {"emoji": "♉️", "element_ru": "🌍 Земля", "planet_ru": "♀️ Венера", "element_en": "🌍 Earth", "planet_en": "♀️ Venus"},
+    "gemini":      {"emoji": "♊️", "element_ru": "💨 Воздух", "planet_ru": "☿ Меркурий", "element_en": "💨 Air", "planet_en": "☿ Mercury"},
+    "cancer":      {"emoji": "♋️", "element_ru": "💧 Вода", "planet_ru": "🌙 Луна", "element_en": "💧 Water", "planet_en": "🌙 Moon"},
+    "leo":         {"emoji": "♌️", "element_ru": "🔥 Огонь", "planet_ru": "☀️ Солнце", "element_en": "🔥 Fire", "planet_en": "☀️ Sun"},
+    "virgo":       {"emoji": "♍️", "element_ru": "🌍 Земля", "planet_ru": "☿ Меркурий", "element_en": "🌍 Earth", "planet_en": "☿ Mercury"},
+    "libra":       {"emoji": "♎️", "element_ru": "💨 Воздух", "planet_ru": "♀️ Венера", "element_en": "💨 Air", "planet_en": "♀️ Venus"},
+    "scorpio":     {"emoji": "♏️", "element_ru": "💧 Вода", "planet_ru": "♇ Плутон", "element_en": "💧 Water", "planet_en": "♇ Pluto"},
+    "sagittarius": {"emoji": "♐️", "element_ru": "🔥 Огонь", "planet_ru": "♃ Юпитер", "element_en": "🔥 Fire", "planet_en": "♃ Jupiter"},
+    "capricorn":   {"emoji": "♑️", "element_ru": "🌍 Земля", "planet_ru": "♄ Сатурн", "element_en": "🌍 Earth", "planet_en": "♄ Saturn"},
+    "aquarius":    {"emoji": "♒️", "element_ru": "💨 Воздух", "planet_ru": "⛢ Уран", "element_en": "💨 Air", "planet_en": "⛢ Uranus"},
+    "pisces":      {"emoji": "♓️", "element_ru": "💧 Вода", "planet_ru": "♆ Нептун", "element_en": "💧 Water", "planet_en": "♆ Neptune"}
 }
 
+# Кнопки под каждым гороскопом
 def get_horoscope_actions_keyboard(sign: str, day: str, detailed: bool = False, lang: str = 'ru'):
     buttons = []
 
@@ -79,6 +61,7 @@ def get_horoscope_actions_keyboard(sign: str, day: str, detailed: bool = False, 
     
     return InlineKeyboardMarkup(buttons)
 
+# Основной вывод гороскопа
 async def send_horoscope(update_or_query, context: ContextTypes.DEFAULT_TYPE, sign: str, day: str, detailed: bool = False, lang: str = 'ru'):
     if sign not in ZODIAC_INFO:
         text = get_text('invalid_sign', lang)
@@ -104,11 +87,11 @@ async def send_horoscope(update_or_query, context: ContextTypes.DEFAULT_TYPE, si
 
     try:
         start_time = time.time()
-        horoscope_text = generate_horoscope(sign, day=day, detailed=detailed, lang=lang)
+        horoscope_text = await generate_horoscope(sign, day=day, detailed=detailed, lang=lang)
         duration = time.time() - start_time
-        logger.info(f"Гороскоп для {sign} сгенерирован за {duration:.2f} сек")
+        logger.info(f"✅ Гороскоп для {sign} сгенерирован за {duration:.2f} сек")
     except Exception as e:
-        logger.error(f"Ошибка генерации гороскопа: {e}")
+        logger.exception(f"❌ Ошибка генерации гороскопа: {e}")
         await message.edit_text(
             get_text('horoscope_error', lang),
             reply_markup=get_back_to_menu_inline(lang=lang)
@@ -144,6 +127,7 @@ async def send_horoscope(update_or_query, context: ContextTypes.DEFAULT_TYPE, si
         else:
             raise
 
+# Стартовое меню выбора знака — сегодня
 async def horoscope_today(update: Update, context: ContextTypes.DEFAULT_TYPE, lang: str = 'ru'):
     try:
         reply_markup = get_zodiac_inline_keyboard("horoscope", lang=lang)
@@ -157,6 +141,7 @@ async def horoscope_today(update: Update, context: ContextTypes.DEFAULT_TYPE, la
         logger.error(f"horoscope_today error: {e}")
         await update.effective_message.reply_text(get_text('error', lang), reply_markup=get_back_to_menu_inline(lang=lang))
 
+# Стартовое меню выбора знака — завтра
 async def horoscope_tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE, lang: str = 'ru'):
     try:
         reply_markup = get_zodiac_inline_keyboard("horoscope_tomorrow", lang=lang)
@@ -170,6 +155,7 @@ async def horoscope_tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE,
         logger.error(f"horoscope_tomorrow error: {e}")
         await update.effective_message.reply_text(get_text('error', lang), reply_markup=get_back_to_menu_inline(lang=lang))
 
+# Обработка callback с выбором знака
 async def handle_zodiac_callback(update: Update, context: ContextTypes.DEFAULT_TYPE, lang: str = 'ru'):
     try:
         query = update.callback_query
@@ -200,5 +186,5 @@ async def handle_zodiac_callback(update: Update, context: ContextTypes.DEFAULT_T
             await query.message.edit_text(get_text('invalid_format', lang), reply_markup=get_back_to_menu_inline(lang=lang))
 
     except Exception as e:
-        logger.error(f"handle_zodiac_callback error: {e}")
+        logger.exception(f"handle_zodiac_callback error: {e}")
         await update.effective_message.reply_text(get_text('error', lang), reply_markup=get_back_to_menu_inline(lang=lang))
