@@ -121,7 +121,7 @@ def toggle_user_language(user_id: int) -> str:
                 rows.append(row)
 
         if updated:
-            with open(USER_FILE, "w", encoding="utf-8", newline=True) as file:
+            with open(USER_FILE, "w", encoding="utf-8", newline="") as file:
                 writer = csv.DictWriter(file, fieldnames=CSV_FIELDS)
                 writer.writeheader()
                 writer.writerows(rows)
