@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -17,10 +16,14 @@ def setup_scheduler(application):
         def send_daily_horoscopes():
             """Ежедневная рассылка гороскопов подписчикам в 10:00"""
             logger.info("🔔 Запуск утренней рассылки гороскопов...")
+
             try:
                 cache = load_cache()
                 users = get_all_subscriptions()
-                asyncio.run(send_messages(application, users, cache))
+
+                # ✅ Создаём задачу ВНУТРИ loop'а бота
+                application.create_task(send_messages(application, users, cache))
+
             except Exception as e:
                 logger.error(f"❌ Ошибка в рассылке гороскопов: {e}")
 
@@ -43,14 +46,10 @@ def setup_scheduler(application):
         logger.error(f"❌ Ошибка при запуске планировщика: {e}")
 
 
+# ───────── ASYNC SEND MESSAGES ─────────
 
 async def send_messages(application, users, cache):
-    """
-    Отправляет гороскопы подписчикам (из кэша)
-    :param application: Telegram Application
-    :param users: список [(chat_id, sign), ...]
-    :param cache: загруженный кэш
-    """
+    """Отправляет гороскопы подписчикам"""
     current_date = str(datetime.today().date())
     sent_count = 0
     error_count = 0
@@ -70,7 +69,6 @@ async def send_messages(application, users, cache):
                     f"{'─' * 30}\n\n"
                     f"{user_data['text']}"
                 )
-
                 await application.bot.send_message(
                     chat_id=chat_id,
                     text=message,
