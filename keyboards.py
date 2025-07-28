@@ -1,5 +1,4 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
-from services.locales import get_text  # перевод текстов по ключам
 
 # 🔮 Знаки зодиака (для гороскопов и подписки)
 ZODIAC_SIGNS = [
@@ -9,22 +8,26 @@ ZODIAC_SIGNS = [
     ["Козерог", "Водолей", "Рыбы"]
 ]
 
-def get_main_menu_keyboard(lang="ru"):
+
+def get_main_menu_keyboard():
     """
-    Главное меню под полем ввода (обычная клавиатура)
+    Обычная клавиатура, отображается под полем ввода сообщений.
+    Используется после команд /start, /menu.
     """
     keyboard = [
-        [get_text("today_horoscope", lang), get_text("tomorrow_horoscope", lang)],
-        [get_text("tarot_one", lang), get_text("tarot_three", lang)],
-        [get_text("tarot_five", lang), get_text("compatibility", lang)],
-        [get_text("magic_ball", lang), get_text("subscribe", lang)],
-        [get_text("language_switch", lang)]  # Перевод через .locales
+        ["🌞 Гороскоп на сегодня", "🌜 Гороскоп на завтра"],
+        ["🃏 Таро-карта дня", "🔮 Таро 3 карты"],
+        ["✨ Таро 5 карт", "❤️ Совместимость"],
+        ["🧿 Магический шар", "🔔 Подписка"]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-def get_zodiac_inline_keyboard(prefix: str = "horoscope", lang="ru") -> InlineKeyboardMarkup:
+
+def get_zodiac_inline_keyboard(prefix: str = "horoscope") -> InlineKeyboardMarkup:
     """
-    Inline-клавиатура с выбором знака зодиака
+    Inline-клавиатура для выбора знака зодиака по префиксу.
+    Используется для получения гороскопа на сегодня/завтра.
+    Пример callback_data: horoscope:овен
     """
     keyboard = [
         [
@@ -32,14 +35,18 @@ def get_zodiac_inline_keyboard(prefix: str = "horoscope", lang="ru") -> InlineKe
             for sign in row
         ] for row in ZODIAC_SIGNS
     ]
+
     keyboard.append([
-        InlineKeyboardButton(get_text("main_menu", lang), callback_data="main_menu")
+        InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")
     ])
+    
     return InlineKeyboardMarkup(keyboard)
 
-def get_zodiac_subscribe_keyboard(lang="ru") -> InlineKeyboardMarkup:
+
+def get_zodiac_subscribe_keyboard() -> InlineKeyboardMarkup:
     """
-    Выбор знака для подписки
+    Inline-клавиатура для выбора знака с целью подписки.
+    Пример callback_data: subscribe_овен
     """
     keyboard = [
         [
@@ -47,22 +54,29 @@ def get_zodiac_subscribe_keyboard(lang="ru") -> InlineKeyboardMarkup:
             for sign in row
         ] for row in ZODIAC_SIGNS
     ]
+
     keyboard.append([
-        InlineKeyboardButton(get_text("back", lang), callback_data="main_menu")
+        InlineKeyboardButton("⬅️ Назад", callback_data="main_menu")
     ])
+
     return InlineKeyboardMarkup(keyboard)
 
-def get_back_to_menu_inline(lang="ru") -> InlineKeyboardMarkup:
+
+def get_back_to_menu_inline() -> InlineKeyboardMarkup:
     """
-    Кнопка "Назад в меню"
+    Одна кнопка: вернуться в меню.
+    Используется как переход после любых действий.
     """
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton(get_text("back_to_menu", lang), callback_data="back_to_menu")]
+        [InlineKeyboardButton("⬅️ Вернуться в меню", callback_data="back_to_menu")]
     ])
+
 
 def get_inline_menu(options: list[tuple[str, str]], row_width: int = 2) -> InlineKeyboardMarkup:
     """
-    Генерация inline-клавиатуры из пар ("текст", "callback")
+    Генератор произвольной inline-клавиатуры из списка.
+    :param options: список пар ("текст кнопки", "callback_data")
+    :param row_width: сколько кнопок в ряду
     """
     return InlineKeyboardMarkup([
         [
@@ -72,12 +86,17 @@ def get_inline_menu(options: list[tuple[str, str]], row_width: int = 2) -> Inlin
         for i in range(0, len(options), row_width)
     ])
 
-def get_back_or_repeat_inline(prefix: str = "main_menu", repeat_command: str = "", lang="ru") -> InlineKeyboardMarkup:
+
+def get_back_or_repeat_inline(prefix: str = "main_menu", repeat_command: str = "") -> InlineKeyboardMarkup:
     """
-    Кнопки: Повторить и Назад
+    Клавиатура с кнопками: Повторить + Вернуться в меню.
+    Можно передать обе кнопки, или только одну.
     """
     buttons = []
+    
     if repeat_command:
-        buttons.append(InlineKeyboardButton(get_text("repeat", lang), callback_data=repeat_command))
-    buttons.append(InlineKeyboardButton(get_text("main_menu", lang), callback_data=prefix))
+        buttons.append(InlineKeyboardButton("🔄 Повторить", callback_data=repeat_command))
+    
+    buttons.append(InlineKeyboardButton("🏠 Главное меню", callback_data=prefix))
+
     return InlineKeyboardMarkup([buttons])
