@@ -4,20 +4,15 @@ from telegram import Update, InputMediaPhoto
 from telegram.ext import ContextTypes
 from services.database import save_prediction
 from keyboards import get_back_to_menu_inline
-from services.locales import get_text
-from services.yandex_translate import translate
 
 # Загрузка данных карт
 with open("data/tarot_cards.json", encoding="utf-8") as f:
     CARDS = json.load(f)
 
 # Позиции для 3-картного расклада
-POSITIONS_3 = {
-    'ru': ["Прошлое", "Настоящее", "Будущее"],
-    'en': ["Past", "Present", "Future"]
-}
+POSITIONS_3 = ["Прошлое", "Настоящее", "Будущее"]
 
-async def draw_card(lang: str = 'ru', used_names: set = None) -> dict:
+def draw_card(used_names: set = None) -> dict:
     if used_names is None:
         used_names = set()
         
@@ -28,11 +23,6 @@ async def draw_card(lang: str = 'ru', used_names: set = None) -> dict:
             is_reversed = random.choice([True, False])
             name = card["name"] + (" (перевёрнутая)" if is_reversed else "")
             meaning = card["reversed_meaning"] if is_reversed else card["meaning"]
-            
-            if lang == 'en':
-                name = await translate(name, 'en')
-                meaning = await translate(meaning, 'en')
-            
             return {
                 "name": name,
                 "meaning": meaning,
@@ -40,6 +30,7 @@ async def draw_card(lang: str = 'ru', used_names: set = None) -> dict:
             }
 
 def split_text(text: str, limit: int = 1000) -> list:
+    """Разделяет текст на части с учетом ограничения длины"""
     if len(text) <= limit:
         return [text]
     
@@ -59,16 +50,19 @@ def split_text(text: str, limit: int = 1000) -> list:
     
     return parts
 
-async def tarot(update: Update, context: ContextTypes.DEFAULT_TYPE, lang: str = 'ru'):
+async def tarot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        card = await draw_card(lang)
+        card = draw_card()
 
-        message = get_text('tarot_card', lang, card_name=card['name'], description=card['meaning'])
+        message = f"🃏 Карта дня\n\n{card['name']}\n{card['meaning']}"
 
+        # Разбиваем текст на части
         text_parts = split_text(message)
 
+        # Сохраняем в БД
         save_prediction(update.effective_chat.id, message, "tarot")
 
+        # Определяем метод отправки
         if update.callback_query:
             send_photo = update.callback_query.message.reply_photo
             send_text = update.callback_query.message.reply_text
@@ -76,45 +70,50 @@ async def tarot(update: Update, context: ContextTypes.DEFAULT_TYPE, lang: str = 
             send_photo = update.message.reply_photo
             send_text = update.message.reply_text
 
+        # Отправляем карту с первой частью текста
         await send_photo(
             photo=card["image"],
             caption=text_parts[0]
         )
 
+        # Отправляем остальные части текста
         for part in text_parts[1:]:
             await send_text(part)
 
+        # Кнопка возврата в меню
         await send_text(
             "🃏",
-            reply_markup=get_back_to_menu_inline(lang=lang)
+            reply_markup=get_back_to_menu_inline()
         )
 
     except Exception as e:
-        error_message = get_text('tarot_error', lang)
+        error_message = f"Произошла ошибка: {str(e)}"
         if update.callback_query:
             await update.callback_query.message.reply_text(error_message)
         else:
             await update.message.reply_text(error_message)
 
-async def tarot3(update: Update, context: ContextTypes.DEFAULT_TYPE, lang: str = 'ru'):
+async def tarot3(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         used = set()
         cards = []
         all_images = []
-        message = get_text('tarot3_header', lang) + "\n\n"
+        message = "🃏 Расклад из трёх карт\n\n"
 
-        positions = POSITIONS_3.get(lang, POSITIONS_3['ru'])
-
+        # Вытягиваем карты
         for i in range(3):
-            card = await draw_card(lang, used)
+            card = draw_card(used)
             cards.append(card)
             all_images.append(card["image"])
-            message += f"{positions[i]}\n→ {card['name']}\n{card['meaning']}\n\n"
+            message += f"{POSITIONS_3[i]}\n→ {card['name']}\n{card['meaning']}\n\n"
 
+        # Сохраняем в БД
         save_prediction(update.effective_chat.id, message, "tarot3")
 
+        # Разбиваем текст
         text_parts = split_text(message)
 
+        # Определяем метод отправки
         if update.callback_query:
             send_media = update.callback_query.message.reply_media_group
             send_text = update.callback_query.message.reply_text
@@ -122,9 +121,11 @@ async def tarot3(update: Update, context: ContextTypes.DEFAULT_TYPE, lang: str =
             send_media = update.message.reply_media_group
             send_text = update.message.reply_text
 
+        # Формируем media group
         media_group = [
             InputMediaPhoto(media=img) for img in all_images[:-1]
         ]
+        # Последняя карта — с подписью
         media_group.append(
             InputMediaPhoto(
                 media=all_images[-1],
@@ -132,18 +133,21 @@ async def tarot3(update: Update, context: ContextTypes.DEFAULT_TYPE, lang: str =
             )
         )
 
+        # Отправляем изображения
         await send_media(media=media_group)
 
+        # Остаток текста
         for part in text_parts[1:]:
             await send_text(part)
 
+        # Кнопка возврата в меню
         await send_text(
             "🃏",
-            reply_markup=get_back_to_menu_inline(lang=lang)
+            reply_markup=get_back_to_menu_inline()
         )
 
     except Exception as e:
-        error_message = get_text('tarot_error', lang)
+        error_message = f"Произошла ошибка: {str(e)}"
         if update.callback_query:
             await update.callback_query.message.reply_text(error_message)
         else:

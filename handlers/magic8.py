@@ -13,54 +13,40 @@ from telegram.constants import ChatAction
 from telegram.ext import ContextTypes
 
 from keyboards import get_main_menu_keyboard
-from services.locales import get_text
 
 logger = logging.getLogger(__name__)
 
-MAGIC_8_BALL_ANSWERS = {
-    'ru': [
-        "🔮 Бесспорно!",
-        "✨ Да — определённо.",
-        "🌟 Можешь рассчитывать на это.",
-        "🟢 Думаю, да.",
-        "🙃 Скорее всего.",
-        "💫 Знаки говорят: да.",
-        "👍 Перспективы хорошие.",
-        "🤔 Пожалуй, нет.",
-        "❌ Не рассчитывай на это.",
-        "🚫 Ответ — нет.",
-        "🧘 Спроси позже.",
-        "😐 Пока туманно. Попробуй позже.",
-        "🔁 Всё может измениться. Повтори позже.",
-        "🤷 Я не могу сказать сейчас.",
-        "🤡 Очень сомнительно.",
-        "🔥 Не сегодня!"
-    ],
-    'en': [
-        "🔮 It is certain!",
-        "✨ Yes — definitely.",
-        "🌟 You may rely on it.",
-        "🟢 Yes.",
-        "🙃 Most likely.",
-        "💫 Signs point to yes.",
-        "👍 Outlook good.",
-        "🤔 Don't count on it.",
-        "❌ My reply is no.",
-        "🚫 No.",
-        "🧘 Ask again later.",
-        "😐 Reply hazy, try again.",
-        "🔁 Better not tell you now.",
-        "🤷 Cannot predict now.",
-        "🤡 Very doubtful.",
-        "🔥 Not today!"
-    ]
-}
+# 🎱 Варианты ответов магического шара
+MAGIC_8_BALL_ANSWERS = [
+    "🔮 Бесспорно!",
+    "✨ Да — определённо.",
+    "🌟 Можешь рассчитывать на это.",
+    "🟢 Думаю, да.",
+    "🙃 Скорее всего.",
+    "💫 Знаки говорят: да.",
+    "👍 Перспективы хорошие.",
+    "🤔 Пожалуй, нет.",
+    "❌ Не рассчитывай на это.",
+    "🚫 Ответ — нет.",
+    "🧘 Спроси позже.",
+    "😐 Пока туманно. Попробуй позже.",
+    "🔁 Всё может измениться. Повтори позже.",
+    "🤷 Я не могу сказать сейчас.",
+    "🤡 Очень сомнительно.",
+    "🔥 Не сегодня!"
+]
 
-async def start_magic_8ball(update: Update, context: ContextTypes.DEFAULT_TYPE, lang: str = 'ru'):
+
+# 🔘 Старт: кнопка "🧿 Магический шар"
+async def start_magic_8ball(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показывает приглашение к магическому шару"""
     try:
-        message = get_text('magic8_ask', lang)
+        message = (
+            "🧿 <b>Задайте мысленно свой вопрос Вселенной</b>\n\n"
+            "Когда будете готовы — нажмите кнопку ниже 🎱"
+        )
         markup = InlineKeyboardMarkup([[
-            InlineKeyboardButton(get_text('magic8_button', lang), callback_data="magic_8ball_answer")
+            InlineKeyboardButton("Узнать ответ у шара 🎱", callback_data="magic_8ball_answer")
         ]])
         if update.callback_query:
             await update.callback_query.answer()
@@ -70,30 +56,35 @@ async def start_magic_8ball(update: Update, context: ContextTypes.DEFAULT_TYPE, 
 
     except Exception as e:
         logger.error(f"[Magic8] Ошибка в start_magic_8ball: {e}")
-        await update.effective_message.reply_text(get_text('error', lang), reply_markup=get_main_menu_keyboard(lang=lang))
+        await update.effective_message.reply_text("⚠️ Произошла ошибка.", reply_markup=get_main_menu_keyboard())
 
-async def show_magic_8ball_answer(update: Update, context: ContextTypes.DEFAULT_TYPE, lang: str = 'ru'):
+
+# 🔮 Показать ответ шара
+async def show_magic_8ball_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показывает случайный ответ от шара"""
     try:
         query = update.callback_query
         await query.answer()
 
         chat_id = query.message.chat_id
 
-        await query.message.edit_text(get_text('magic8_loading', lang))
+        # Шаг 1: «Шар вращается...»
+        await query.message.edit_text("🌀 Шар вращается...\nСилы Вселенной собираются... 🔮")
 
+        # Шаг 2: typing...
         await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
         await asyncio.sleep(2.5)
 
-        answers = MAGIC_8_BALL_ANSWERS.get(lang, MAGIC_8_BALL_ANSWERS['ru'])
-        answer = random.choice(answers)
+        # Шаг 3: показать случайный ответ
+        answer = random.choice(MAGIC_8_BALL_ANSWERS)
         await query.message.edit_text(
-            get_text('magic8_answer', lang, answer=answer),
+            f"<b>🎱 Магический шар говорит:</b>\n\n{answer}",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(get_text('magic8_repeat', lang), callback_data="magic_8ball_repeat")],
-                [InlineKeyboardButton(get_text('back_to_menu', lang), callback_data="main_menu")]
+                [InlineKeyboardButton("🌀 Ещё раз", callback_data="magic_8ball_repeat")],
+                [InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")]
             ])
         )
     except Exception as e:
         logger.exception(f"[Magic8] Ошибка при показе магического ответа: {e}")
-        await update.effective_message.reply_text(get_text('magic8_error', lang), reply_markup=get_main_menu_keyboard(lang=lang))
+        await update.effective_message.reply_text("⚠️ Не удалось получить ответ.", reply_markup=get_main_menu_inline_keyboard())
