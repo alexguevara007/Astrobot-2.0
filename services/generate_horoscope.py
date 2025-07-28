@@ -3,112 +3,154 @@ from datetime import date, timedelta
 import logging
 import requests
 from bs4 import BeautifulSoup
-from cachetools import TTLCache
+from cachetools import TTLCache  # Для кэширования с TTL
 
 from services.yandex_translate import translate_text
 from services.yandex_gpt import generate_text_with_system
 from services.astro_data import get_lunar_info
 from services.astroseek_scraper import get_day_energy_description
-from services.locales import get_text
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Кэш
-daily_cache = TTLCache(maxsize=1000, ttl=86400)
-weekly_cache = TTLCache(maxsize=1000, ttl=604800)
+# Кэши для гороскопов с разными TTL (max 1000 записей каждый)
+daily_cache = TTLCache(maxsize=1000, ttl=86400)  # 24 часа для today/tomorrow
+weekly_cache = TTLCache(maxsize=1000, ttl=604800)  # 7 дней для week
 
+# Соответствие имени знака и id на сайте
 SIGN_MAP = {
     'aries': 1, 'taurus': 2, 'gemini': 3, 'cancer': 4,
     'leo': 5, 'virgo': 6, 'libra': 7, 'scorpio': 8,
     'sagittarius': 9, 'capricorn': 10, 'aquarius': 11, 'pisces': 12
 }
 
+# Стилевые варианты перефразировки
+REPHRASE_TONES = [
+    "по-дружески и с поддержкой, без пафоса",
+    "анализируя, как хороший коуч или психолог",
+    "человечно, с теплотой и вниманием",
+    "с лёгким философским тоном и образами",
+    "в спокойном и уверенном стиле, как зрелый наставник"
+]
+
+# Варианты вступлений
+START_INTROS = [
+    "🔮 Сегодня важно:",
+    "🌌 Главные сигналы от звёзд:",
+    "💫 Общий вектор для дня:",
+    "🪐 Атмосфера и путь:",
+    "✨ Небо рекомендует:"
+]
+
+
 def fetch_horoscope_from_site(sign: str, day: str = "today") -> str:
-    """Скрейпинг текста с horoscope.com"""
+    """Парсинг текста гороскопа с сайта horoscope.com"""
     sign_id = SIGN_MAP.get(sign.lower())
     if not sign_id:
         return "🚫 Неверный знак зодиака"
 
     url = f"https://www.horoscope.com/us/horoscopes/general/horoscope-general-daily-{day}.aspx?sign={sign_id}"
-
+    
     try:
         response = requests.get(url, timeout=10)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
         box = soup.find("div", class_="main-horoscope")
         p = box.find("p")
-        return p.get_text(strip=True)
+        text = p.get_text(strip=True)
+        return text
     except Exception as e:
         logger.error(f"Ошибка парсинга гороскопа: {e}")
         return f"⚠️ Не удалось получить гороскоп: {e}"
 
-async def generate_horoscope(sign: str, day: str = "today", detailed: bool = False, lang: str = 'ru') -> str:
-    """
-    Основная функция генерации: скрейпинг → перевод → проще или GPT → кэш
-    """
-    cache = weekly_cache if day == "week" else daily_cache
-    cache_key = f"{sign.lower()}_{day}_{detailed}_{lang}"
 
+def generate_horoscope(sign: str, day: str = "today", detailed: bool = False) -> str:
+    """
+    Финальная генерация гороскопа с кэшированием:
+    - парсим гороскоп
+    - переводим
+    - перефразируем через GPT
+    - добавляем лунный и энергетический контекст
+    """
+    # Выбор кэша в зависимости от day
+    if day == "week":
+        cache = weekly_cache
+    else:
+        cache = daily_cache
+
+    # Ключ для кэша
+    cache_key = f"{sign.lower()}_{day}_{detailed}"
+
+    # Проверка кэша
     if cache_key in cache:
-        logger.info(f"✅ Из кэша: {cache_key}")
+        logger.info(f"Гороскоп для {sign} ({day}, detailed={detailed}) взят из кэша.")
         return cache[cache_key]
 
     try:
-        # 1. Получаем оригинальный гороскоп (англ.)
+        # 1. Парсинг оригинала
         original_text_en = fetch_horoscope_from_site(sign, day)
         if original_text_en.startswith("⚠️") or original_text_en.startswith("🚫"):
             return original_text_en
 
-        # 2. Перевод если язык — не английский
-        if lang == 'en':
-            translated_text = original_text_en
-        else:
-            translated_text = await translate_text(original_text_en, target_lang=lang)
+        # 2. Перевод
+        translated_text = translate_text(original_text_en, target_lang="ru")
 
-        # 3. Контекст: Луна и энергия дня
+        # 3. Дополнительный контекст — Луна и энергия дня
         target_date = date.today() if day == "today" else date.today() + timedelta(days=1)
-        lunar_info = get_lunar_info(target_date, lang=lang)
-        energy = get_day_energy_description(lang=lang)
+        lunar_info = get_lunar_info(target_date)
+        energy = get_day_energy_description()
 
-        moon_context = get_text('moon_context', lang, sign=lunar_info['moon_sign'], phase=lunar_info['phase_text'], percent=lunar_info['moon_phase'])
-        energy_context = get_text('energy_context', lang, energy=energy or get_text('energy_undefined', lang))
+        moon_context = f"Луна в {lunar_info['moon_sign']}, фаза: {lunar_info['phase_text']}, {lunar_info['moon_phase']}%"
+        energy_context = f"Энергия дня: {energy or 'не определена'}"
 
-        # 4. Тон и вступление
-        tone = random.choice(get_text('rephrase_tones', lang).split(';')).strip()
-        intro = random.choice(get_text('start_intros', lang).split(';')).strip()
+        # 4. Генерация стиля и интро
+        tone = random.choice(REPHRASE_TONES)
+        intro = random.choice(START_INTROS)
 
-        # 5. GPT генерация
-        system_prompt = get_text('system_prompt', lang)
-        user_prompt = get_text('user_prompt_template', lang,
-                               translated=translated_text,
-                               tone=tone,
-                               moon_context=moon_context,
-                               energy_context=energy_context)
+        # 5. Формируем promt
+        system_prompt = (
+            "Ты создаешь персональные гороскопы на русском языке. "
+            "Пиши по-настоящему: искренне, без клише, без эзотерики. "
+            "Текст должен быть интересным, человечным и легко воспринимаемым."
+        )
 
-        temperature = random.uniform(0.9, 1.0)
-        logger.info(f"🎯 GPT темп: {temperature:.2f}")
+        user_prompt = f"""
+Вот перевод гороскопа:
+
+\"\"\"{translated_text}\"\"\"
+
+Перепиши его в стиле — {tone}.
+Избегай штампов и банальностей. Пиши по-человечески, как будто обращаешься к одному человеку.
+Учитывай этот контекст дня:
+
+- {moon_context}
+- {energy_context}
+"""
+
+        # 6. Генерация финального текста с ограничением temperature [0.9, 1.0]
+        temperature = random.uniform(0.9, 1.0)  # Ограничено до 1.0, чтобы избежать ошибки 400 в Yandex GPT
+        logger.info(f"Генерация GPT с temperature={temperature:.2f}")
 
         try:
-            gpt_response = await generate_text_with_system(
+            gpt_response = generate_text_with_system(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt.strip(),
-                temperature=temperature,
-                max_tokens=1000 if detailed else 500
+                temperature=temperature,  # Уже ограничено
+                max_tokens=1000 if detailed else 500  # Контроль длины в зависимости от detailed
             )
-            if not gpt_response:
+            if not gpt_response:  # Если GPT вернул пустую строку (fallback)
                 raise ValueError("GPT вернул пустой ответ")
-
             final_text = f"{intro}\n\n{gpt_response.strip()}"
         except Exception as e:
-            logger.warning(f"⚠️ GPT недоступен, fallback на перевод: {e}")
+            logger.warning(f"GPT недоступен. Используем перевод. {e}")
             final_text = f"{intro}\n\n{translated_text.strip()}"
 
-        # 6. Кэшируем
+        # Кэшируем результат
         cache[cache_key] = final_text
-        logger.info(f"✅ Сгенерировано и сохранено: {cache_key}")
+        logger.info(f"Гороскоп для {sign} ({day}, detailed={detailed}) сгенерирован и закеширован.")
+
         return final_text
 
     except Exception as e:
-        logger.exception("❌ Ошибка при генерации гороскопа")
-        return get_text('generation_error', lang)
+        logger.exception("Ошибка при генерации гороскопа")
+        return "⚠️ Не удалось сгенерировать гороскоп. Попробуйте позже."

@@ -5,10 +5,15 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# 📁 Путь к кэшу
 CACHE_FILE = "cache/horoscope_cache.json"
 
+# Создать папку /cache, если её нет
+os.makedirs(os.path.dirname(CACHE_FILE), exist_ok=True)
+
+
 def load_cache() -> dict:
-    """Загрузка всех данных кэша"""
+    """Загрузить текущий кэш из файла"""
     try:
         if os.path.exists(CACHE_FILE):
             with open(CACHE_FILE, encoding="utf-8") as f:
@@ -17,30 +22,28 @@ def load_cache() -> dict:
         logger.error(f"❌ Ошибка загрузки кэша: {e}")
     return {}
 
+
 def save_cache(data: dict):
-    """Сохраняет данные в кэш-файл"""
+    """Сохранить кэш в файл"""
     try:
-        os.makedirs(os.path.dirname(CACHE_FILE), exist_ok=True)
         with open(CACHE_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         logger.info("✅ Кэш успешно сохранён")
     except Exception as e:
         logger.error(f"❌ Ошибка сохранения кэша: {e}")
 
-def get_cache_key(sign: str, lang: str = 'ru') -> str:
-    """Возвращает ключ кэша по знаку и языку"""
-    return f"brief_{sign.lower()}_today_{lang}"
 
-def save_horoscope_to_cache(sign: str, text: str, lang: str = 'ru'):
+def save_horoscope_to_cache(sign: str, text: str):
     """
-    Сохраняет гороскоп на сегодня в кэш по знаку и языку
+    Сохранить гороскоп на сегодня в кэш
+    :param sign: знак зодиака, на английском (например, "aries")
+    :param text: текст гороскопа
     """
     try:
         today = str(date.today())
         sign_lower = sign.lower()
-        key = get_cache_key(sign, lang)
+        key = f"brief_{sign_lower}_today"
 
-        # Загружаем и обновляем кэш
         cache = load_cache()
         if sign_lower not in cache:
             cache[sign_lower] = {}
@@ -51,14 +54,14 @@ def save_horoscope_to_cache(sign: str, text: str, lang: str = 'ru'):
         }
 
         save_cache(cache)
-        logger.info(f"💾 Гороскоп для '{sign_lower}' ({lang}) на {today} сохранён в кэш.")
-
+        logger.info(f"💾 Гороскоп для {sign_lower} на {today} сохранён в кэш")
     except Exception as e:
         logger.error(f"❌ Ошибка при сохранении в кэш: {e}")
 
+
 def clear_old_cache():
     """
-    Очищает данные, отличные от сегодняшней даты
+    Очистить устаревшие записи в кэше (оставить только на текущую дату)
     """
     try:
         today = str(date.today())
@@ -70,10 +73,11 @@ def clear_old_cache():
                 key: value for key, value in entries.items()
                 if value.get("date") == today
             }
+
             if fresh_entries:
                 cleaned[sign] = fresh_entries
 
         save_cache(cleaned)
-        logger.info("🧹 Устаревшие записи кэша удалены.")
+        logger.info("🧹 Старый кэш успешно очищен")
     except Exception as e:
         logger.error(f"❌ Ошибка при очистке кэша: {e}")
